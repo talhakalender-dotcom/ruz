@@ -51,6 +51,6 @@ dependencyResolutionManagement {
     }
 }
 
-// shared: ortak kod (veri, mantık, arayüz). androidApp: yalnızca Android kabuğu.
+// core: arayüzden bağımsız saf mantık. shared: ortak kod (veri, arayüz). androidApp: yalnızca Android kabuğu.
 // webApp: tarayıcı deneme sürümü (örnek verilerle). iOS geldiğinde iosApp ayrıca eklenecek.
-include(":shared", ":androidApp", ":webApp")
+include(":core", ":shared", ":androidApp", ":webApp")

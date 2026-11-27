@@ -18,11 +18,13 @@ kotlin {
         }
         withHostTest {}
     }
-    // Tarayıcı deneme sürümü (webApp modülü kullanır). Ortak testler Node.js'te de koşar,
-    // böylece ayrıştırıcı tarayıcıda da telefondakiyle aynı çalışır.
+    // Tarayıcı deneme sürümü (webApp modülü kullanır). Buradaki testler Compose'a bağlı olduğu için
+    // yalnızca Android'de koşar; saf mantığın tarayıcı testleri core modülünde.
     @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
     wasmJs {
-        nodejs()
+        nodejs {
+            testTask { enabled = false }
+        }
     }
     // iOS hedefleri ileride buraya eklenecek; ortak kod commonMain'de duruyor.
 
@@ -35,6 +37,7 @@ kotlin {
             }
         }
         commonMain.dependencies {
+            api(project(":core"))
             api(libs.compose.runtime)
             api(libs.compose.foundation)
             api(libs.compose.ui)
