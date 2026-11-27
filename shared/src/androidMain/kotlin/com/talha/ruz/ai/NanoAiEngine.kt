@@ -53,7 +53,6 @@ class NanoAiEngine : AiEngine {
                         _lastError.value = s.e.describe()
                         _status.value = AiStatus.Error
                     }
-                    else -> Unit
                 }
             }
         } catch (e: Exception) {
