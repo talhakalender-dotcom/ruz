@@ -1,0 +1,33 @@
+-- Kullanıcının kategorileri. Hepsi eklenip silinebilir.
+-- Silme yumuşaktır (deleted_at); ileride bulut senkronu silinenleri de taşıyabilsin diye.
+CREATE TABLE category (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    color INTEGER NOT NULL,
+    sort_order REAL NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    deleted_at INTEGER
+);
+
+selectActive:
+SELECT * FROM category WHERE deleted_at IS NULL ORDER BY sort_order;
+
+countAll:
+SELECT count(*) FROM category;
+
+insert:
+INSERT INTO category(id, name, color, sort_order, created_at, updated_at, deleted_at)
+VALUES (:id, :name, :color, :sortOrder, :now, :now, NULL);
+
+rename:
+UPDATE category SET name = :name, updated_at = :now WHERE id = :id;
+
+setColor:
+UPDATE category SET color = :color, updated_at = :now WHERE id = :id;
+
+setOrder:
+UPDATE category SET sort_order = :sortOrder, updated_at = :now WHERE id = :id;
+
+softDelete:
+UPDATE category SET deleted_at = :now, updated_at = :now WHERE id = :id;

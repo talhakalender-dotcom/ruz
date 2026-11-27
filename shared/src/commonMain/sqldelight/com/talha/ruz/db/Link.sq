@@ -1,0 +1,13 @@
+-- Gantt bağları: öncül bitince ardıl başlar (bitiş-başlangıç).
+CREATE TABLE link (
+    id TEXT NOT NULL PRIMARY KEY,
+    predecessor_id TEXT NOT NULL,
+    successor_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    deleted_at INTEGER,
+    UNIQUE (predecessor_id, successor_id)
+);
+
+selectActive:
+SELECT * FROM link WHERE deleted_at IS NULL;

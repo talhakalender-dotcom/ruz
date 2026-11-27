@@ -1,0 +1,45 @@
+-- Aklına gelen her şey bir öğedir: iş, alışveriş, fikir, ödeme...
+-- category_id boşsa öğe Gelen kutusundadır. start_at doluysa Gantt'ta görünür.
+CREATE TABLE item (
+    id TEXT NOT NULL PRIMARY KEY,
+    text TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    category_id TEXT,
+    done INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    done_at INTEGER,
+    start_at INTEGER,
+    duration_min INTEGER,
+    is_milestone INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    reminder_min_before INTEGER,
+    sort_order REAL NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    deleted_at INTEGER
+);
+
+CREATE INDEX item_category ON item(category_id);
+CREATE INDEX item_start ON item(start_at);
+
+selectActive:
+SELECT * FROM item WHERE deleted_at IS NULL ORDER BY sort_order, created_at;
+
+minOrder:
+SELECT coalesce(min(sort_order), 0.0) FROM item WHERE deleted_at IS NULL;
+
+insert:
+INSERT INTO item(id, text, note, category_id, done, done_at, start_at, duration_min, is_milestone,
+                 reminder_min_before, sort_order, created_at, updated_at, deleted_at)
+VALUES (:id, :text, '', :categoryId, 0, NULL, :startAt, :durationMin, :isMilestone,
+        NULL, :sortOrder, :now, :now, NULL);
+
+setDone:
+UPDATE item SET done = :done, done_at = :doneAt, updated_at = :now WHERE id = :id;
+
+setCategory:
+UPDATE item SET category_id = :categoryId, updated_at = :now WHERE id = :id;
+
+moveAllFromCategory:
+UPDATE item SET category_id = :toCategoryId, updated_at = :now WHERE category_id = :fromCategoryId;
+
+softDelete:
+UPDATE item SET deleted_at = :now, updated_at = :now WHERE id = :id;
