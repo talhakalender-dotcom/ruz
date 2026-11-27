@@ -527,7 +527,8 @@ private fun DrawScope.drawHeader(ctx: DrawCtx, minLabelPx: Float, accent: Color)
         } else {
             x0 + ctx.px(3f)
         }
-        drawText(layout, topLeft = Offset(x, (dayRowH - layout.size.height) / 2f))
+        // Günün görünen kısmına sığmayan etiket yarım görünmesin.
+        if (x >= ctx.labelW) drawText(layout, topLeft = Offset(x, (dayRowH - layout.size.height) / 2f))
 
         if (hourStep != null) {
             var m = hourStep
@@ -578,7 +579,7 @@ private fun DrawScope.drawBar(
         drawPath(path, color)
         if (dragging) drawPath(path, ctx.text, style = Stroke(width = ctx.px(2f)))
         val l = ctx.measure(item.text, textStyle.copy(color = ctx.text), ctx.px(220f))
-        drawText(l, topLeft = Offset(cx + r + ctx.px(6f), cy - l.size.height / 2f))
+        drawText(l, topLeft = Offset(max(cx + r, ctx.labelW) + ctx.px(6f), cy - l.size.height / 2f))
         return
     }
 
@@ -604,20 +605,35 @@ private fun DrawScope.drawBar(
         if (x1 - start > ctx.px(30f)) drawText(l, topLeft = Offset(start, top + (barH - l.size.height) / 2f))
     } else {
         val l = ctx.measure(item.text, textStyle.copy(color = if (item.done) ctx.muted else ctx.text), ctx.px(220f))
-        drawText(l, topLeft = Offset(x1 + ctx.px(6f), top + (barH - l.size.height) / 2f))
+        // Çubuk ekranın solunda kaldıysa adı yine görünür kalsın.
+        drawText(l, topLeft = Offset(max(x1, ctx.labelW) + ctx.px(6f), top + (barH - l.size.height) / 2f))
     }
 }
 
 private fun DrawScope.drawLabel(ctx: DrawCtx, row: GanttRow, top: Float, pad: Float) {
     when (row) {
         is GanttRow.Group -> {
-            val arrow = if (row.collapsed) "▸" else "▾"
             val style = TextStyle(fontSize = 12.sp, color = ctx.text, fontWeight = FontWeight.SemiBold)
             row.color?.let { c ->
                 drawCircle(Color(c.toInt()), radius = ctx.px(4f), center = Offset(pad + ctx.px(14f), top + row.height / 2f))
             }
-            val arrowL = ctx.measure(arrow, style, ctx.px(14f))
-            drawText(arrowL, topLeft = Offset(pad - ctx.px(4f), top + (row.height - arrowL.size.height) / 2f))
+            // Açık/kapalı oku (yazı tipine bağlı kalmasın diye çizilir).
+            val ax = pad + ctx.px(1f)
+            val ay = top + row.height / 2f
+            val a = ctx.px(4f)
+            val arrow = Path().apply {
+                if (row.collapsed) {
+                    moveTo(ax, ay - a)
+                    lineTo(ax + a, ay)
+                    lineTo(ax, ay + a)
+                } else {
+                    moveTo(ax - a / 2f, ay - a / 2f)
+                    lineTo(ax + a * 1.5f, ay - a / 2f)
+                    lineTo(ax + a / 2f, ay + a / 2f)
+                }
+                close()
+            }
+            drawPath(arrow, ctx.muted)
             val title = if (row.collapsed) "${row.title} (${row.count})" else row.title
             val l = ctx.measure(title, style, ctx.labelW - pad - ctx.px(26f))
             drawText(l, topLeft = Offset(pad + ctx.px(22f), top + (row.height - l.size.height) / 2f))

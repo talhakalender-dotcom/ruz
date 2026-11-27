@@ -61,7 +61,7 @@ import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Instant
 
-private val DurationChoices = listOf(15, 30, 60, 120, 240)
+private val DurationChoices = listOf(15, 30, 60, 120, 180, 240, 480)
 
 /**
  * Öğeye dokununca açılan düzenleme paneli: metin, kategori, gün/saat, süre, son tarih, bitti, sil.
