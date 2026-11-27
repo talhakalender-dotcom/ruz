@@ -31,3 +31,6 @@ UPDATE category SET sort_order = :sortOrder, updated_at = :now WHERE id = :id;
 
 softDelete:
 UPDATE category SET deleted_at = :now, updated_at = :now WHERE id = :id;
+
+restore:
+UPDATE category SET deleted_at = NULL, updated_at = :now WHERE id = :id;

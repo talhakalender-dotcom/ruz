@@ -1,5 +1,7 @@
 -- Aklına gelen her şey bir öğedir: iş, alışveriş, fikir, ödeme...
 -- category_id boşsa öğe Gelen kutusundadır. start_at doluysa Gantt'ta görünür.
+-- all_day: gün belli, saat yok (start_at o günün gece yarısı, Gantt'ta tam gün çubuğu).
+-- Şema değişince migrations/ altına yeni bir .sqm eklenir; telefondaki veriler korunur.
 CREATE TABLE item (
     id TEXT NOT NULL PRIMARY KEY,
     text TEXT NOT NULL,
@@ -14,7 +16,8 @@ CREATE TABLE item (
     sort_order REAL NOT NULL,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
-    deleted_at INTEGER
+    deleted_at INTEGER,
+    all_day INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0
 );
 
 CREATE INDEX item_category ON item(category_id);
@@ -28,9 +31,14 @@ SELECT coalesce(min(sort_order), 0.0) FROM item WHERE deleted_at IS NULL;
 
 insert:
 INSERT INTO item(id, text, note, category_id, done, done_at, start_at, duration_min, is_milestone,
-                 reminder_min_before, sort_order, created_at, updated_at, deleted_at)
+                 reminder_min_before, sort_order, created_at, updated_at, deleted_at, all_day)
 VALUES (:id, :text, '', :categoryId, 0, NULL, :startAt, :durationMin, :isMilestone,
-        NULL, :sortOrder, :now, :now, NULL);
+        NULL, :sortOrder, :now, :now, NULL, :allDay);
+
+update:
+UPDATE item SET text = :text, category_id = :categoryId, start_at = :startAt, duration_min = :durationMin,
+                all_day = :allDay, is_milestone = :isMilestone, updated_at = :now
+WHERE id = :id;
 
 setDone:
 UPDATE item SET done = :done, done_at = :doneAt, updated_at = :now WHERE id = :id;
@@ -38,8 +46,14 @@ UPDATE item SET done = :done, done_at = :doneAt, updated_at = :now WHERE id = :i
 setCategory:
 UPDATE item SET category_id = :categoryId, updated_at = :now WHERE id = :id;
 
-moveAllFromCategory:
-UPDATE item SET category_id = :toCategoryId, updated_at = :now WHERE category_id = :fromCategoryId;
+activeIdsInCategory:
+SELECT id FROM item WHERE category_id = :categoryId AND deleted_at IS NULL;
+
+setCategoryForIds:
+UPDATE item SET category_id = :categoryId, updated_at = :now WHERE id IN :ids;
 
 softDelete:
 UPDATE item SET deleted_at = :now, updated_at = :now WHERE id = :id;
+
+restore:
+UPDATE item SET deleted_at = NULL, updated_at = :now WHERE id = :id;

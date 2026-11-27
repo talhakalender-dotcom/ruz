@@ -24,6 +24,8 @@ data class RuzItem(
     /** Gantt'taki başlangıç (epoch ms). null ise planlanmamış. */
     val startAt: Long?,
     val durationMin: Int?,
+    /** Gün belli, saat yok: Gantt'ta tam gün çubuğu. */
+    val allDay: Boolean,
     val isMilestone: Boolean,
     val reminderMinBefore: Int?,
     val order: Double,

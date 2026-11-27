@@ -1,5 +1,6 @@
 package com.talha.ruz.ui.inbox
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,12 +18,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.talha.ruz.data.RuzItem
+import com.talha.ruz.ui.whenLabel
+import kotlinx.datetime.LocalDate
 
-/** Kategorisi olmayan, henüz yerine konmamış öğeler. */
+/** Kategorisi olmayan, henüz yerine konmamış öğeler. Dokununca düzenleme paneli açılır. */
 @Composable
 fun InboxPane(
     items: List<RuzItem>,
+    today: LocalDate,
     onToggleDone: (id: String, done: Boolean) -> Unit,
+    onOpen: (RuzItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (items.isEmpty()) {
@@ -30,7 +35,8 @@ fun InboxPane(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("Gelen kutusu boş", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Aklına geleni alttaki kutuya yaz. Kategorisi olmayanlar burada bekler, sonra plana taşırsın.",
+                    "Aklına geleni alttaki kutuya yaz. #kategori yazmadıkların burada bekler.\n" +
+                        "Örnek: \"yarın 14:00 vergi dairesi #iş\", \"süt al #alışveriş\"",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -44,10 +50,11 @@ fun InboxPane(
         items(items, key = { it.id }) { item ->
             ListItem(
                 headlineContent = { Text(item.text) },
+                supportingContent = whenLabel(item, today)?.let { w -> @Composable { Text(w) } },
                 leadingContent = {
                     Checkbox(checked = item.done, onCheckedChange = { onToggleDone(item.id, it) })
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().clickable { onOpen(item) },
             )
             HorizontalDivider()
         }

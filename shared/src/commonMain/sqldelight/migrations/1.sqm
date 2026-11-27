@@ -1,0 +1,2 @@
+-- Sürüm 1 → 2: saati belli olmayan (tam gün) öğeler için işaret.
+ALTER TABLE item ADD COLUMN all_day INTEGER NOT NULL DEFAULT 0;
