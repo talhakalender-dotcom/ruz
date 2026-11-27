@@ -18,6 +18,12 @@ kotlin {
         }
         withHostTest {}
     }
+    // Tarayıcı deneme sürümü (webApp modülü kullanır). Ortak testler Node.js'te de koşar,
+    // böylece ayrıştırıcı tarayıcıda da telefondakiyle aynı çalışır.
+    @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
+    wasmJs {
+        nodejs()
+    }
     // iOS hedefleri ileride buraya eklenecek; ortak kod commonMain'de duruyor.
 
     sourceSets {

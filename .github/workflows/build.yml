@@ -1,4 +1,4 @@
-name: APK derle
+name: Derle (APK + web)
 
 on:
   push:
@@ -39,7 +39,7 @@ jobs:
           RUZ_KEYSTORE_PASSWORD: ${{ secrets.RUZ_KEYSTORE_PASSWORD }}
         run: |
           set -o pipefail
-          gradle :shared:allTests :androidApp:assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
+          gradle :shared:allTests :androidApp:assembleRelease :webApp:wasmJsBrowserDistribution --no-daemon --stacktrace 2>&1 | tee build.log
 
       - name: Hataları göster
         if: failure()
@@ -69,3 +69,21 @@ jobs:
           cp androidApp/build/outputs/apk/release/androidApp-release.apk Ruz.apk
           gh release delete son --yes --cleanup-tag || true
           gh release create son Ruz.apk --title "Ruz (son sürüm #${{ github.run_number }})" --notes "Otomatik derleme #${{ github.run_number }}" --target ${{ github.sha }}
+
+      - name: Web sürümünü yayınla
+        if: github.ref == 'refs/heads/main'
+        env:
+          DEPLOY_KEY: ${{ secrets.RUZ_WEB_DEPLOY_KEY }}
+        run: |
+          if [ -z "$DEPLOY_KEY" ]; then echo "::warning::RUZ_WEB_DEPLOY_KEY yok; web sürümü yayınlanmadı."; exit 0; fi
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/ruz_web
+          chmod 600 ~/.ssh/ruz_web
+          ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+          cd webApp/build/dist/wasmJs/productionExecutable
+          touch .nojekyll
+          git init -q -b main
+          git add -A
+          git -c user.name="ruz-ci" -c user.email="ruz-ci@users.noreply.github.com" commit -q -m "Ruz web #${{ github.run_number }} (${GITHUB_SHA::7})"
+          GIT_SSH_COMMAND="ssh -i ~/.ssh/ruz_web -o IdentitiesOnly=yes" git push -q -f git@github.com:talhakalender-dotcom/ruz-web.git main
+          echo "Web sürümü: https://talhakalender-dotcom.github.io/ruz-web/" >> "$GITHUB_STEP_SUMMARY"

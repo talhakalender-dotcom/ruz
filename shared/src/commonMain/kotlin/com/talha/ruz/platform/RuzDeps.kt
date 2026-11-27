@@ -16,6 +16,8 @@ class RuzDeps(
     val ai: AiEngine,
     val platform: PlatformActions,
     val appVersion: String,
+    /** Tarayıcı deneme sürümü: örnek veriler, sayfa yenilenince sıfırlanır. */
+    val isPreview: Boolean = false,
 )
 
 /** Geri tuşu. Android'de sistem geri hareketine bağlanır. */

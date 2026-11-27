@@ -6,7 +6,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver
 import com.talha.ruz.ai.NanoAiEngine
-import com.talha.ruz.data.RuzRepository
+import com.talha.ruz.data.SqlRuzRepository
 import com.talha.ruz.db.RuzDatabase
 import kotlinx.coroutines.Dispatchers
 
@@ -14,7 +14,7 @@ fun createRuzDeps(context: Context, appVersion: String): RuzDeps {
     val app = context.applicationContext
     val driver = AndroidSqliteDriver(RuzDatabase.Schema, app, "ruz.db")
     return RuzDeps(
-        repository = RuzRepository(RuzDatabase(driver), Dispatchers.IO),
+        repository = SqlRuzRepository(RuzDatabase(driver), Dispatchers.IO),
         ai = NanoAiEngine(),
         platform = AndroidPlatformActions(app),
         appVersion = appVersion,
