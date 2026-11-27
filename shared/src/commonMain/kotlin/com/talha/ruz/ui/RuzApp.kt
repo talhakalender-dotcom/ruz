@@ -164,9 +164,10 @@ private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit) {
             return
         }
         scope.launch {
-            val categoryId = when {
-                p.categoryName == null -> defaultCategory?.id
-                else -> categories.firstOrNull { it.name == p.categoryName }?.id ?: repo.addCategory(p.categoryName)
+            val tagName = p.categoryName
+            val categoryId = when (tagName) {
+                null -> defaultCategory?.id
+                else -> categories.firstOrNull { it.name == tagName }?.id ?: repo.addCategory(tagName)
             }
             val categoryName = p.categoryName ?: defaultCategory?.name
             val duration = p.durationMin ?: when {
