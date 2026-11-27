@@ -17,8 +17,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -34,16 +39,49 @@ import com.talha.ruz.data.RuzCategory
 import com.talha.ruz.data.RuzItem
 import com.talha.ruz.ui.dayLabel
 import com.talha.ruz.ui.epochToLocal
+import com.talha.ruz.ui.gantt.GanttChart
 import com.talha.ruz.ui.timeRangeLabel
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 
 /**
- * Plan alanı. Gantt (3. aşama) gelene kadar: üstte haftalık şerit ve "şimdi" çizgisi,
- * altta günü belli öğelerin gün gün listesi. Öğeye dokununca düzenleme paneli açılır.
+ * Plan alanı: Gantt şeması ya da gün gün liste (sağ alttaki düğmeyle geçilir).
+ * Öğeye dokununca düzenleme paneli açılır.
  */
 @Composable
 fun PlanPane(
+    items: List<RuzItem>,
+    categories: List<RuzCategory>,
+    now: LocalDateTime,
+    onOpen: (RuzItem) -> Unit,
+    onReschedule: (item: RuzItem, startAt: Long, durationMin: Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var asList by rememberSaveable { mutableStateOf(false) }
+    if (!asList) {
+        GanttChart(
+            items = items,
+            categories = categories,
+            now = now,
+            onOpen = onOpen,
+            onReschedule = onReschedule,
+            modifier = modifier,
+            onShowList = { asList = true },
+        )
+        return
+    }
+    Box(modifier) {
+        AgendaList(items, categories, now, onOpen, Modifier.fillMaxSize())
+        SmallFloatingActionButton(
+            onClick = { asList = false },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
+        ) { Text("Gantt", modifier = Modifier.padding(horizontal = 12.dp)) }
+    }
+}
+
+/** Gün gün liste: üstte haftalık şerit, altta günü belli öğeler. */
+@Composable
+private fun AgendaList(
     items: List<RuzItem>,
     categories: List<RuzCategory>,
     now: LocalDateTime,
@@ -61,7 +99,7 @@ fun PlanPane(
             Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
                 Text(
                     "Plan boş.\nAlttaki kutuya \"yarın 14:00 toplantı\" ya da \"cuma hakediş\" gibi yaz; " +
-                        "günü belli öğeler buraya düşer.\nSürükle-bırak Gantt 3. aşamada geliyor.",
+                        "günü belli öğeler buraya düşer.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,

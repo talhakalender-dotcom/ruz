@@ -157,6 +157,15 @@ private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit) {
         }
     }
 
+    /** Gantt'ta taşınan/uzatılan iş; "Geri al" eski zamana döndürür. */
+    fun reschedule(item: RuzItem, startAt: Long, durationMin: Int) {
+        fun fields(start: Long?, duration: Int?) =
+            ItemFields(item.text, item.categoryId, start, duration, item.allDay, item.isMilestone)
+        scope.launch { repo.updateItem(item.id, fields(startAt, durationMin)) }
+        val label = whenLabel(item.copy(startAt = startAt, durationMin = durationMin), today) ?: ""
+        notify("${item.text} · $label") { repo.updateItem(item.id, fields(item.startAt, item.durationMin)) }
+    }
+
     fun submit(p: ParsedCapture, defaultCategory: RuzCategory?) {
         if (p.isQuestion) {
             // 5. aşamada bu soru Nano'ya gidecek.
@@ -280,7 +289,14 @@ private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit) {
 
             @Composable
             fun Plan(m: Modifier) {
-                PlanPane(items, categories, now, onOpen = { editingItemId = it.id }, modifier = m)
+                PlanPane(
+                    items = items,
+                    categories = categories,
+                    now = now,
+                    onOpen = { editingItemId = it.id },
+                    onReschedule = ::reschedule,
+                    modifier = m,
+                )
             }
 
             if (wide) {
