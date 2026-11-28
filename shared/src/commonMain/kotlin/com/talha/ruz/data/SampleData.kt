@@ -7,6 +7,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import kotlinx.datetime.toInstant
 
@@ -88,5 +89,14 @@ fun sampleRepository(today: LocalDate, timeZone: TimeZone): MemoryRuzRepository 
             reminderMinBefore = null, generatedUntil = initialGeneratedUntil(today),
         ),
     )
-    return MemoryRuzRepository(cats, items, listOf(RuzLink("l0", kalip, beton)), series)
+    val habits = listOf(
+        RuzHabit("h0", "Spor", setOf(1, 3, 5), 0.0),
+        RuzHabit("h1", "Kitap 20 dk", emptySet(), 1.0),
+        RuzHabit("h2", "2 litre su", emptySet(), 2.0),
+    )
+    fun daysAgo(n: Int) = today.minus(n, DateTimeUnit.DAY)
+    val checks = (1..12).map { HabitCheck("h1", daysAgo(it)) } +
+        listOf(1, 3, 5, 8, 10).map { HabitCheck("h0", daysAgo(it)) } +
+        listOf(2, 4).map { HabitCheck("h2", daysAgo(it)) }
+    return MemoryRuzRepository(cats, items, listOf(RuzLink("l0", kalip, beton)), series, habits, checks)
 }

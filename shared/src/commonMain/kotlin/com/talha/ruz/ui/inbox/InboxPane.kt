@@ -44,26 +44,27 @@ fun InboxPane(
     modifier: Modifier = Modifier,
     drag: ItemDragCallbacks? = null,
     onAddToPlan: ((RuzItem) -> Unit)? = null,
+    header: (@Composable () -> Unit)? = null,
 ) {
-    if (items.isEmpty()) {
-        Box(modifier.padding(32.dp), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Gelen kutusu boş", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "Aklına geleni alttaki kutuya yaz. #kategori yazmadıkların burada bekler.\n" +
-                        "Örnek: \"yarın 14:00 vergi dairesi #iş\", \"süt al #alışveriş\"",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
-        }
-        return
-    }
     val dragCb by rememberUpdatedState(drag)
     val addCb by rememberUpdatedState(onAddToPlan)
     LazyColumn(modifier) {
+        if (header != null) item(key = "header") { header() }
+        if (items.isEmpty()) {
+            item(key = "empty") {
+                Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Gelen kutusu boş", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Aklına geleni alttaki kutuya yaz. #kategori yazmadıkların burada bekler.\n" +
+                            "Örnek: \"yarın 14:00 vergi dairesi #iş\", \"süt al #alışveriş\"",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            }
+        }
         items(items, key = { it.id }) { item ->
             var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
             var menu by remember { mutableStateOf(false) }

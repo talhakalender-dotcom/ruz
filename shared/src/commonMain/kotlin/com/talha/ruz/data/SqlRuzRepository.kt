@@ -33,6 +33,16 @@ class SqlRuzRepository(
     override val links: Flow<List<RuzLink>> =
         db.linkQueries.selectActive().asFlow().mapToList(io).map { list -> list.map { it.toDomain() } }
 
+    override val habits: Flow<List<RuzHabit>> =
+        db.habitQueries.selectActive().asFlow().mapToList(io).map { list ->
+            list.map { RuzHabit(it.id, it.name, decodeWeekdays(it.weekdays), it.sort_order) }
+        }
+
+    override val habitChecks: Flow<List<HabitCheck>> =
+        db.habitQueries.selectChecksSince(checksSince()).asFlow().mapToList(io).map { list ->
+            list.mapNotNull { c -> runCatching { HabitCheck(c.habit_id, LocalDate.parse(c.day)) }.getOrNull() }
+        }
+
     override val series: Flow<List<RuzSeries>> =
         db.seriesQueries.selectActive().asFlow().mapToList(io).map { list -> list.mapNotNull { it.toDomain() } }
 
@@ -260,6 +270,29 @@ class SqlRuzRepository(
         }
     }
 
+    override suspend fun addHabit(name: String, weekdays: Set<Int>): String = withContext(io) {
+        val id = newId()
+        val order = db.habitQueries.maxOrder().executeAsOne() + 1.0
+        db.habitQueries.insert(id = id, name = name.trim(), weekdays = encodeWeekdays(weekdays), sortOrder = order, now = nowMillis())
+        id
+    }
+
+    override suspend fun deleteHabit(id: String): Unit = withContext(io) {
+        db.habitQueries.softDelete(now = nowMillis(), id = id)
+    }
+
+    override suspend fun restoreHabit(id: String): Unit = withContext(io) {
+        db.habitQueries.restore(now = nowMillis(), id = id)
+    }
+
+    override suspend fun setHabitDone(id: String, day: LocalDate, done: Boolean): Unit = withContext(io) {
+        if (done) {
+            db.habitQueries.markDone(habitId = id, day = day.toString(), now = nowMillis())
+        } else {
+            db.habitQueries.unmarkDone(habitId = id, day = day.toString())
+        }
+    }
+
     private fun nextColor(used: List<Long>): Long =
         CategoryPalette.firstOrNull { it !in used } ?: CategoryPalette[used.size % CategoryPalette.size]
 }
@@ -303,5 +336,11 @@ private fun Series.toDomain(): RuzSeries? {
 
 private fun epochToLocal(ms: Long, timeZone: TimeZone) =
     kotlin.time.Instant.fromEpochMilliseconds(ms).toLocalDateTime(timeZone)
+
+/** Seri hesabı için bir yıl geriye bakmak yeter. */
+private fun checksSince(): String {
+    val today = kotlin.time.Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+    return LocalDate(today.year - 1, today.month.ordinal + 1, 1).toString()
+}
 
 private fun Link.toDomain() = RuzLink(id = id, predecessorId = predecessor_id, successorId = successor_id)

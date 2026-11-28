@@ -18,6 +18,8 @@ class MemoryRuzRepository(
     initialItems: List<RuzItem> = emptyList(),
     initialLinks: List<RuzLink> = emptyList(),
     initialSeries: List<RuzSeries> = emptyList(),
+    initialHabits: List<RuzHabit> = emptyList(),
+    initialChecks: List<HabitCheck> = emptyList(),
 ) : RuzRepository {
     private data class Cat(val c: RuzCategory, val deleted: Boolean = false)
     private data class It(val i: RuzItem, val deleted: Boolean = false)
@@ -35,6 +37,11 @@ class MemoryRuzRepository(
     override val links: Flow<List<RuzLink>> = linkState
 
     private val seriesState = MutableStateFlow(initialSeries)
+
+    private val habitState = MutableStateFlow(initialHabits.map { it to false })
+    override val habits: Flow<List<RuzHabit>> = habitState.map { list -> list.filter { !it.second }.map { it.first }.sortedBy { it.order } }
+    private val checkState = MutableStateFlow(initialChecks)
+    override val habitChecks: Flow<List<HabitCheck>> = checkState
     override val series: Flow<List<RuzSeries>> = seriesState
 
     override suspend fun seedIfEmpty() {
@@ -221,6 +228,28 @@ class MemoryRuzRepository(
             }
         }
         seriesState.update { list -> list.filterNot { it.id == seriesId } }
+    }
+
+    override suspend fun addHabit(name: String, weekdays: Set<Int>): String {
+        val id = newId()
+        val order = (habitState.value.maxOfOrNull { it.first.order } ?: 0.0) + 1.0
+        habitState.update { it + (RuzHabit(id, name.trim(), weekdays, order) to false) }
+        return id
+    }
+
+    override suspend fun deleteHabit(id: String) {
+        habitState.update { list -> list.map { if (it.first.id == id) it.first to true else it } }
+    }
+
+    override suspend fun restoreHabit(id: String) {
+        habitState.update { list -> list.map { if (it.first.id == id) it.first to false else it } }
+    }
+
+    override suspend fun setHabitDone(id: String, day: LocalDate, done: Boolean) {
+        checkState.update { list ->
+            val rest = list.filterNot { it.habitId == id && it.day == day }
+            if (done) rest + HabitCheck(id, day) else rest
+        }
     }
 
     override suspend fun restoreCategory(id: String, itemIds: List<String>) {

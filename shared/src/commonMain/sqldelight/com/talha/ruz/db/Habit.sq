@@ -1,0 +1,43 @@
+-- Alışkanlık: her gün (ya da seçilen günlerde) işaretlenen iş. weekdays: "1,2,3,4,5" (1 = pazartesi).
+-- habit_check: işaretlenen günler (ISO tarih).
+CREATE TABLE habit (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    weekdays TEXT NOT NULL,
+    sort_order REAL NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    deleted_at INTEGER
+);
+
+CREATE TABLE habit_check (
+    habit_id TEXT NOT NULL,
+    day TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (habit_id, day)
+);
+
+selectActive:
+SELECT * FROM habit WHERE deleted_at IS NULL ORDER BY sort_order, created_at;
+
+insert:
+INSERT INTO habit(id, name, weekdays, sort_order, created_at, updated_at, deleted_at)
+VALUES (:id, :name, :weekdays, :sortOrder, :now, :now, NULL);
+
+softDelete:
+UPDATE habit SET deleted_at = :now, updated_at = :now WHERE id = :id;
+
+restore:
+UPDATE habit SET deleted_at = NULL, updated_at = :now WHERE id = :id;
+
+maxOrder:
+SELECT coalesce(max(sort_order), 0.0) FROM habit;
+
+selectChecksSince:
+SELECT * FROM habit_check WHERE day >= :since;
+
+markDone:
+INSERT OR REPLACE INTO habit_check(habit_id, day, created_at) VALUES (:habitId, :day, :now);
+
+unmarkDone:
+DELETE FROM habit_check WHERE habit_id = :habitId AND day = :day;

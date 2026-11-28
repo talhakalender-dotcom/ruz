@@ -1,0 +1,17 @@
+-- Sürüm 4 → 5: alışkanlıklar ve günlük işaretleri.
+CREATE TABLE habit (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    weekdays TEXT NOT NULL,
+    sort_order REAL NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    deleted_at INTEGER
+);
+
+CREATE TABLE habit_check (
+    habit_id TEXT NOT NULL,
+    day TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (habit_id, day)
+);

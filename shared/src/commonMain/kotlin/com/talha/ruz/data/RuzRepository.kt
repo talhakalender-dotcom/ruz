@@ -31,6 +31,10 @@ interface RuzRepository {
     val items: Flow<List<RuzItem>>
     val links: Flow<List<RuzLink>>
     val series: Flow<List<RuzSeries>>
+    val habits: Flow<List<RuzHabit>>
+
+    /** Son ~1 yılın alışkanlık işaretleri (seri hesabı için yeterli). */
+    val habitChecks: Flow<List<HabitCheck>>
 
     /** İlk açılışta örnek kategorileri ekler. Kullanıcı hepsini silse bile tekrar eklemez. */
     suspend fun seedIfEmpty()
@@ -80,6 +84,13 @@ interface RuzRepository {
 
     /** Seriyi durdurur: bitmemiş, [fromMs] ve sonrasındaki tekrarlar silinir; geçmiştekiler kalır. */
     suspend fun stopSeries(seriesId: String, fromMs: Long)
+
+    suspend fun addHabit(name: String, weekdays: Set<Int>): String
+    suspend fun deleteHabit(id: String)
+    suspend fun restoreHabit(id: String)
+
+    /** [day] gününün işaretini koyar/kaldırır. */
+    suspend fun setHabitDone(id: String, day: LocalDate, done: Boolean)
 }
 
 /** Kullanılmayan ilk palet rengi; hepsi kullanıldıysa sırayla döner. */

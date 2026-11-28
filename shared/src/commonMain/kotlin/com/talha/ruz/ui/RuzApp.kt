@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.talha.ruz.data.CategoryPalette
 import com.talha.ruz.data.ItemFields
+import com.talha.ruz.ui.habits.HabitsSection
 import com.talha.ruz.money.Money
 import com.talha.ruz.ui.expenses.ExpensesPane
 import androidx.compose.material.icons.filled.ShoppingCart
@@ -146,6 +147,8 @@ private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit) {
     val items by repo.items.collectAsState(initial = emptyList())
     val links by repo.links.collectAsState(initial = emptyList())
     val seriesList by repo.series.collectAsState(initial = emptyList())
+    val habits by repo.habits.collectAsState(initial = emptyList())
+    val habitChecks by repo.habitChecks.collectAsState(initial = emptyList())
     // Gelen kutusundan Gantt'a sürüklenen öğe ve parmağın pencere konumu.
     var dragItem by remember { mutableStateOf<RuzItem?>(null) }
     var dragPos by remember { mutableStateOf<Offset?>(null) }
@@ -430,6 +433,19 @@ private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit) {
                     modifier = m,
                     drag = inboxDrag,
                     onAddToPlan = ::addToPlan,
+                    header = {
+                        HabitsSection(
+                            habits = habits,
+                            checks = habitChecks,
+                            today = today,
+                            onToggle = { h, done -> scope.launch { repo.setHabitDone(h.id, today, done) } },
+                            onAdd = { name, days -> scope.launch { repo.addHabit(name, days) } },
+                            onDelete = { h ->
+                                scope.launch { repo.deleteHabit(h.id) }
+                                notify("Alışkanlık silindi: ${h.name}") { repo.restoreHabit(h.id) }
+                            },
+                        )
+                    },
                 )
             }
 
