@@ -677,8 +677,10 @@ private fun DrawScope.drawBar(
         }
         drawPath(path, color)
         if (dragging) drawPath(path, ctx.text, style = Stroke(width = ctx.px(2f)))
-        val l = ctx.measure(item.text, textStyle.copy(color = ctx.text), ctx.px(220f))
-        drawText(l, topLeft = Offset(max(cx + r, ctx.labelW) + ctx.px(6f), cy - l.size.height / 2f))
+        if (cx + r > ctx.labelW) {
+            val l = ctx.measure(item.text, textStyle.copy(color = ctx.text), ctx.px(220f))
+            drawText(l, topLeft = Offset(max(cx + r, ctx.labelW) + ctx.px(6f), cy - l.size.height / 2f))
+        }
         return
     }
 
@@ -702,9 +704,9 @@ private fun DrawScope.drawBar(
         val start = max(x0, ctx.labelW) + ctx.px(8f)
         val l = ctx.measure(item.text, textStyle, x1 - start - ctx.px(8f))
         if (x1 - start > ctx.px(30f)) drawText(l, topLeft = Offset(start, top + (barH - l.size.height) / 2f))
-    } else {
+    } else if (x1 > ctx.labelW) {
+        // Tamamen ekranın solunda kalan çubuğun adı yazılmaz (sol sütunda zaten var).
         val l = ctx.measure(item.text, textStyle.copy(color = if (item.done) ctx.muted else ctx.text), ctx.px(220f))
-        // Çubuk ekranın solunda kaldıysa adı yine görünür kalsın.
         drawText(l, topLeft = Offset(max(x1, ctx.labelW) + ctx.px(6f), top + (barH - l.size.height) / 2f))
     }
 }
