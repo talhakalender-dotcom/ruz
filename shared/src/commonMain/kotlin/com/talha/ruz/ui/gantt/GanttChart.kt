@@ -462,11 +462,14 @@ fun GanttChart(
                             topLeft = Offset(0f, top),
                             size = Size(size.width, row.height),
                         )
-                        is GanttRow.Task -> row.items.forEach { item ->
+                        is GanttRow.Task -> row.items.forEachIndexed { index, item ->
                             val preview = drag?.takeIf { it.itemId == item.id }
                             val (x0, x1) = barRect(item, spanFor(item))
+                            // Seride ad, bir sonraki tekrara kadar olan boşluğa sığdırılır.
+                            val nextX0 = row.items.getOrNull(index + 1)?.let { barRect(it, spanFor(it)).first } ?: Float.MAX_VALUE
+                            val textRoom = min(px(220f), nextX0 - x1 - px(12f))
                             // Ekranın çok dışındaki tekrarlar çizilmez.
-                            if (x1 < labelW - px(240f) || x0 > size.width + px(40f)) return@forEach
+                            if (x1 < labelW - px(240f) || x0 > size.width + px(40f)) return@forEachIndexed
                             clipRect(left = labelW) {
                                 if (item.id == highlightId) {
                                     val pad = px(4f)
@@ -478,7 +481,7 @@ fun GanttChart(
                                         style = Stroke(width = px(3f)),
                                     )
                                 }
-                                drawBar(ctx, row, item, x0, x1, top, barH, preview != null, colors.outline)
+                                drawBar(ctx, row, item, x0, x1, top, barH, preview != null, colors.outline, textRoom)
                             }
                         }
                     }
@@ -675,6 +678,7 @@ private fun DrawScope.drawBar(
     barH: Float,
     dragging: Boolean,
     fallback: Color,
+    textRoom: Float = Float.MAX_VALUE,
 ) {
     val base = row.color?.let { Color(it.toInt()) } ?: fallback
     val color = if (item.done) base.copy(alpha = 0.35f) else base
@@ -698,8 +702,8 @@ private fun DrawScope.drawBar(
         }
         drawPath(path, color)
         if (dragging) drawPath(path, ctx.text, style = Stroke(width = ctx.px(2f)))
-        if (cx + r > ctx.labelW) {
-            val l = ctx.measure(item.text, textStyle.copy(color = ctx.text), ctx.px(220f))
+        if (cx + r > ctx.labelW && textRoom >= ctx.px(24f)) {
+            val l = ctx.measure(item.text, textStyle.copy(color = ctx.text), min(ctx.px(220f), textRoom))
             drawText(l, topLeft = Offset(max(cx + r, ctx.labelW) + ctx.px(6f), cy - l.size.height / 2f))
         }
         return
@@ -725,9 +729,9 @@ private fun DrawScope.drawBar(
         val start = max(x0, ctx.labelW) + ctx.px(8f)
         val l = ctx.measure(item.text, textStyle, x1 - start - ctx.px(8f))
         if (x1 - start > ctx.px(30f)) drawText(l, topLeft = Offset(start, top + (barH - l.size.height) / 2f))
-    } else if (x1 > ctx.labelW) {
+    } else if (x1 > ctx.labelW && textRoom >= ctx.px(24f)) {
         // Tamamen ekranın solunda kalan çubuğun adı yazılmaz (sol sütunda zaten var).
-        val l = ctx.measure(item.text, textStyle.copy(color = if (item.done) ctx.muted else ctx.text), ctx.px(220f))
+        val l = ctx.measure(item.text, textStyle.copy(color = if (item.done) ctx.muted else ctx.text), min(ctx.px(220f), textRoom))
         drawText(l, topLeft = Offset(max(x1, ctx.labelW) + ctx.px(6f), top + (barH - l.size.height) / 2f))
     }
 }
