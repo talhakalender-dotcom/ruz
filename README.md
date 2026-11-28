@@ -1,7 +1,7 @@
 # Ruz
 
 *Rûz*: gün. Aklına gelen her şeyi tek satırla yakalayıp **Gantt şemasında** planladığın kişisel planlama uygulaması.
-Şimdilik Android (Galaxy Z Fold 7 için tasarlandı). Kod Kotlin Multiplatform olduğu için ileride iOS da gelecek.
+Android uygulaması (Galaxy Z Fold 7 için tasarlandı), Kotlin Multiplatform ile yazıldı.
 
 **Tarayıcıda dene:** https://talhakalender-dotcom.github.io/ruz/ (örnek verilerle; sayfa yenilenince başa döner, mikrofon ve yapay zekâ yok)
 
@@ -9,10 +9,10 @@
 
 1. **İskelet** ✓: Fold uyumlu düzen (açıkken iki panel, kapalıyken sekmeler), veritabanı, tema, Nano test ekranı
 2. **Yakalama ve kategoriler** ✓: tarih/saat/`#kategori` ayrıştırma, sesle yazma, kategori ekleme/silme/renk
-3. Gantt I: çizim, yakınlaştırma, taşıma, uçtan uzatma, kilometre taşı
-4. Gantt II: üstüne bırakınca bağlama, ardılları kaydırma, Gelen kutusundan sürükleme
-5. Hatırlatıcılar ve "?" ile biten sorulara telefondaki yapay zekânın (Gemini Nano) cevabı
-6. Sonra: tekrar eden işler, harcamalar, alışkanlıklar, widget, iOS, bulut ve web
+3. **Gantt I** ✓: çizim, yakınlaştırma, taşıma, uçtan uzatma, kilometre taşı
+4. **Gantt II** ✓: üstüne bırakınca bağlama, ardılları kaydırma, Gelen kutusundan sürükleme
+5. **Hatırlatıcılar ve "?" soruları** ✓: alarm/bildirim, telefondaki yapay zekâ (Gemini Nano) ile notlara soru
+6. **Tekrar, harcama, alışkanlık, widget** ✓: "her ayın 15'i", "350 TL", günlük tikler ve seri, ana ekran widget'ı
 
 ## Yapı
 
