@@ -50,7 +50,7 @@ class MemoryRuzRepository(
             durationMin = fields.durationMin,
             allDay = fields.allDay,
             isMilestone = fields.isMilestone,
-            reminderMinBefore = null,
+            reminderMinBefore = fields.reminderMinBefore,
             order = top,
             createdAt = nowMillis(),
         )
@@ -71,6 +71,7 @@ class MemoryRuzRepository(
                 durationMin = fields.durationMin,
                 allDay = fields.allDay,
                 isMilestone = fields.isMilestone,
+                reminderMinBefore = fields.reminderMinBefore,
             ),
         )
     }

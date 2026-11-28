@@ -33,11 +33,11 @@ insert:
 INSERT INTO item(id, text, note, category_id, done, done_at, start_at, duration_min, is_milestone,
                  reminder_min_before, sort_order, created_at, updated_at, deleted_at, all_day)
 VALUES (:id, :text, '', :categoryId, 0, NULL, :startAt, :durationMin, :isMilestone,
-        NULL, :sortOrder, :now, :now, NULL, :allDay);
+        :reminderMinBefore, :sortOrder, :now, :now, NULL, :allDay);
 
 update:
 UPDATE item SET text = :text, category_id = :categoryId, start_at = :startAt, duration_min = :durationMin,
-                all_day = :allDay, is_milestone = :isMilestone, updated_at = :now
+                all_day = :allDay, is_milestone = :isMilestone, reminder_min_before = :reminderMinBefore, updated_at = :now
 WHERE id = :id;
 
 setDone:

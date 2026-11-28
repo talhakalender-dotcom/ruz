@@ -53,6 +53,7 @@ kotlin {
             implementation(libs.kotlinx.coroutines.android)
             implementation(libs.sqldelight.android.driver)
             implementation(libs.androidx.activity.compose)
+            implementation(libs.androidx.core.ktx)
             // Telefonun sistemindeki Gemini Nano (AICore). Model uygulamaya gömülmez.
             implementation(libs.mlkit.genai.prompt)
         }

@@ -42,6 +42,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.talha.ruz.data.CategoryPalette
 import com.talha.ruz.data.ItemFields
+import com.talha.ruz.ai.QuestionAnswer
+import com.talha.ruz.ai.QuestionAnswerer
+import com.talha.ruz.ui.ask.QuestionSheet
 import com.talha.ruz.data.PlanChange
 import com.talha.ruz.data.Schedule
 import com.talha.ruz.data.planChange
@@ -137,6 +140,9 @@ private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit) {
     var dragPos by remember { mutableStateOf<Offset?>(null) }
     val dropTarget = remember { GanttDropTarget() }
     val tz = remember { TimeZone.currentSystemDefault() }
+    // "?" ile sorulan soru ve cevabı (alttan açılan panel).
+    var askedQuestion by remember { mutableStateOf<String?>(null) }
+    var questionAnswer by remember { mutableStateOf<QuestionAnswer?>(null) }
     val now = rememberNow()
     val today = now.date
     val snackbar = remember { SnackbarHostState() }
@@ -274,8 +280,13 @@ private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit) {
 
     fun submit(p: ParsedCapture, defaultCategory: RuzCategory?) {
         if (p.isQuestion) {
-            // 5. aşamada bu soru Nano'ya gidecek.
-            notify("Sorular 5. aşamada yapay zekâya gidecek.")
+            val q = p.original.trim()
+            askedQuestion = q
+            questionAnswer = null
+            scope.launch {
+                val a = QuestionAnswerer.answer(q, items, categories, localNow(), deps.ai)
+                if (askedQuestion == q) questionAnswer = a
+            }
             return
         }
         scope.launch {
@@ -460,6 +471,19 @@ private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit) {
         }
     }
 
+    askedQuestion?.let { q ->
+        QuestionSheet(
+            question = q,
+            answer = questionAnswer,
+            today = today,
+            onOpen = {
+                askedQuestion = null
+                editingItemId = it.id
+            },
+            onDismiss = { askedQuestion = null },
+        )
+    }
+
     if (editingItem != null) {
         ItemEditSheet(
             item = editingItem,
@@ -480,6 +504,7 @@ private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit) {
                 .mapNotNull { l -> items.firstOrNull { it.id == l.predecessorId }?.let { l to it } },
             successors = links.filter { it.predecessorId == editingItem.id }
                 .mapNotNull { l -> items.firstOrNull { it.id == l.successorId }?.let { l to it } },
+            remindersSupported = deps.platform.remindersSupported,
             onRemoveLink = { l ->
                 commit(planChange(items, links, emptyMap(), tz, removeLinks = listOf(l)), "Bağ kaldırıldı")
             },

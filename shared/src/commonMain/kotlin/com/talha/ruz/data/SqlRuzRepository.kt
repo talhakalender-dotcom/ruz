@@ -55,6 +55,7 @@ class SqlRuzRepository(
             sortOrder = top,
             now = nowMillis(),
             allDay = fields.allDay,
+            reminderMinBefore = fields.reminderMinBefore?.toLong(),
         )
         id
     }
@@ -67,6 +68,7 @@ class SqlRuzRepository(
             durationMin = fields.durationMin?.toLong(),
             allDay = fields.allDay,
             isMilestone = fields.isMilestone,
+            reminderMinBefore = fields.reminderMinBefore?.toLong(),
             now = nowMillis(),
             id = id,
         )

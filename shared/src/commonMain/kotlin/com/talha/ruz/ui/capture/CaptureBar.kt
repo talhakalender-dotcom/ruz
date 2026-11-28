@@ -143,7 +143,7 @@ private fun PreviewChips(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (parsed.isQuestion) {
-            AssistChip(onClick = {}, label = { Text("Soru · yapay zekâ 5. aşamada") })
+            AssistChip(onClick = {}, label = { Text("Soru · notlarına ve planına sorulacak") })
             return@Row
         }
         parsed.date?.let { d ->

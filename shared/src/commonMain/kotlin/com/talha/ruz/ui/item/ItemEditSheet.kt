@@ -49,6 +49,7 @@ import com.talha.ruz.data.ItemFields
 import com.talha.ruz.data.RuzCategory
 import com.talha.ruz.data.RuzItem
 import com.talha.ruz.data.RuzLink
+import com.talha.ruz.remind.ReminderDefaults
 import com.talha.ruz.ui.dayLabel
 import com.talha.ruz.ui.durationLabel
 import com.talha.ruz.ui.epochToLocal
@@ -79,6 +80,7 @@ fun ItemEditSheet(
     predecessors: List<Pair<RuzLink, RuzItem>> = emptyList(),
     successors: List<Pair<RuzLink, RuzItem>> = emptyList(),
     onRemoveLink: (RuzLink) -> Unit = {},
+    remindersSupported: Boolean = false,
 ) {
     val start = remember(item.id) { item.startAt?.let(::epochToLocal) }
     var text by remember(item.id) { mutableStateOf(item.text) }
@@ -87,6 +89,7 @@ fun ItemEditSheet(
     var time by remember(item.id) { mutableStateOf(if (item.allDay) null else start?.time) }
     var duration by remember(item.id) { mutableStateOf(if (item.allDay) null else item.durationMin) }
     var milestone by remember(item.id) { mutableStateOf(item.isMilestone) }
+    var reminder by remember(item.id) { mutableStateOf(item.reminderMinBefore) }
     var pickDate by remember { mutableStateOf(false) }
     var pickTime by remember { mutableStateOf(false) }
     val today = localNow().date
@@ -175,6 +178,31 @@ fun ItemEditSheet(
                     )
                 }
             }
+            if (date != null && remindersSupported) {
+                SectionLabel("Hatırlatma")
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    // Tam gün işler o sabah 09:00'da hatırlatır; saati olanlar seçilen kadar önce.
+                    val choices = if (time == null) {
+                        listOf(null to "Sabah 09:00", ReminderDefaults.OFF to "Kapalı")
+                    } else {
+                        listOf(
+                            null to "15 dk önce",
+                            0 to "Başlarken",
+                            30 to "30 dk önce",
+                            60 to "1 sa önce",
+                            ReminderDefaults.OFF to "Kapalı",
+                        )
+                    }
+                    choices.forEach { (value, label) ->
+                        val selected = reminder == value ||
+                            (time == null && value == null && reminder != ReminderDefaults.OFF)
+                        FilterChip(selected = selected, onClick = { reminder = value }, label = { Text(label) })
+                    }
+                }
+            }
 
             if (predecessors.isNotEmpty() || successors.isNotEmpty()) {
                 SectionLabel("Bağlar")
@@ -208,6 +236,8 @@ fun ItemEditSheet(
                                 },
                                 allDay = d != null && t == null,
                                 isMilestone = d != null && milestone,
+                                // Tam günde yalnız "açık/kapalı" var; dakika değeri saat silinince varsayılana döner.
+                                reminderMinBefore = if (t == null && reminder != ReminderDefaults.OFF) null else reminder,
                             ),
                         )
                     },

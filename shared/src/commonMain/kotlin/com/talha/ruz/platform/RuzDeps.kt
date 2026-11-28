@@ -8,6 +8,9 @@ import com.talha.ruz.data.RuzRepository
 interface PlatformActions {
     /** Metni paylaşma penceresiyle gönderir (WhatsApp, e-posta, not...). */
     fun share(text: String)
+
+    /** Bu platform alarm/bildirim kurabiliyor mu? (Tarayıcıda hayır.) */
+    val remindersSupported: Boolean get() = false
 }
 
 /** Uygulamanın bağımlılıkları; platform tarafı kurar, arayüz kullanır. */
