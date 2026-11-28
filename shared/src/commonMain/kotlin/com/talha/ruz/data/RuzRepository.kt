@@ -12,6 +12,9 @@ data class ItemFields(
     val isMilestone: Boolean,
 )
 
+/** Bir işin Gantt'taki yeri. [startAt] null ise plandan çıkar. */
+data class Schedule(val startAt: Long?, val durationMin: Int?, val allDay: Boolean)
+
 /**
  * Verinin tek kapısı. Arayüz yalnızca bunu görür.
  * Telefonda [SqlRuzRepository] (kalıcı), tarayıcı deneme sürümünde [MemoryRuzRepository] (örnek veriler) kullanılır.
@@ -50,6 +53,13 @@ interface RuzRepository {
 
     /** Kategori silmeyi geri alır; öğeleri eski kategorisine döndürür. */
     suspend fun restoreCategory(id: String, itemIds: List<String>)
+
+    /** Birden çok işin zamanını tek seferde değiştirir (zamanlama motorunun sonucu). */
+    suspend fun setSchedules(changes: Map<String, Schedule>)
+
+    /** Bitiş-başlangıç bağı ekler, kimliğini döndürür. */
+    suspend fun addLink(predecessorId: String, successorId: String): String
+    suspend fun deleteLink(id: String)
 }
 
 /** Kullanılmayan ilk palet rengi; hepsi kullanıldıysa sırayla döner. */

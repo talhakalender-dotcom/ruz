@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import com.talha.ruz.data.ItemFields
 import com.talha.ruz.data.RuzCategory
 import com.talha.ruz.data.RuzItem
+import com.talha.ruz.data.RuzLink
 import com.talha.ruz.ui.dayLabel
 import com.talha.ruz.ui.durationLabel
 import com.talha.ruz.ui.epochToLocal
@@ -75,6 +76,9 @@ fun ItemEditSheet(
     onSave: (ItemFields) -> Unit,
     onToggleDone: (Boolean) -> Unit,
     onDelete: () -> Unit,
+    predecessors: List<Pair<RuzLink, RuzItem>> = emptyList(),
+    successors: List<Pair<RuzLink, RuzItem>> = emptyList(),
+    onRemoveLink: (RuzLink) -> Unit = {},
 ) {
     val start = remember(item.id) { item.startAt?.let(::epochToLocal) }
     var text by remember(item.id) { mutableStateOf(item.text) }
@@ -172,6 +176,16 @@ fun ItemEditSheet(
                 }
             }
 
+            if (predecessors.isNotEmpty() || successors.isNotEmpty()) {
+                SectionLabel("Bağlar")
+                predecessors.forEach { (l, other) ->
+                    LinkRow("Şu bitince başlar: ${other.text}") { onRemoveLink(l) }
+                }
+                successors.forEach { (l, other) ->
+                    LinkRow("Bu bitince başlar: ${other.text}") { onRemoveLink(l) }
+                }
+            }
+
             Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onDelete) { Text("Sil", color = MaterialTheme.colorScheme.error) }
                 Spacer(Modifier.weight(1f))
@@ -240,6 +254,14 @@ fun ItemEditSheet(
             dismissButton = { TextButton(onClick = { pickTime = false }) { Text("Vazgeç") } },
             text = { TimePicker(state = state) },
         )
+    }
+}
+
+@Composable
+private fun LinkRow(text: String, onRemove: () -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        IconButton(onClick = onRemove) { Icon(Icons.Filled.Close, contentDescription = "Bağı kaldır") }
     }
 }
 

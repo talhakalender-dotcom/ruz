@@ -15,6 +15,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -38,6 +40,8 @@ import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.positionChanged
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.TextLayoutResult
@@ -53,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.talha.ruz.data.RuzCategory
 import com.talha.ruz.data.RuzItem
+import com.talha.ruz.data.RuzLink
 import com.talha.ruz.gantt.DragHandle
 import com.talha.ruz.gantt.Span
 import com.talha.ruz.gantt.TimeScale
@@ -60,6 +65,7 @@ import com.talha.ruz.gantt.applyDrag
 import com.talha.ruz.gantt.hourLabelStepMinutes
 import com.talha.ruz.gantt.localDayStart
 import com.talha.ruz.gantt.snapStepMinutes
+import com.talha.ruz.gantt.snapToStep
 import com.talha.ruz.ui.TurkishMonthShort
 import com.talha.ruz.ui.epochToLocal
 import com.talha.ruz.ui.hhmm
@@ -103,7 +109,20 @@ private sealed interface Hit {
 /** Hareket işleyicisinin her zaman güncel ölçüleri görmesi için. */
 private data class Geo(val labelW: Float, val maxScroll: Float, val minPpm: Float, val maxPpm: Float)
 
-private data class DragPreview(val itemId: String, val handle: DragHandle, val span: Span)
+/** Sürüklenen çubuk: önizleme zamanı ve (başka çubuğun üstündeyse) bağlanacağı iş. */
+private data class DragPreview(val itemId: String, val handle: DragHandle, val span: Span, val linkTarget: RuzItem? = null)
+
+/** Gantt dışından (Gelen kutusundan) sürüklenen öğenin bırakıldığı yer. */
+data class GanttDrop(val startMs: Long, val allDay: Boolean, val onto: RuzItem?)
+
+/**
+ * Paneller arası sürükleme için Gantt'ın bırakma noktasını çözen köprü.
+ * Ana ekran oluşturur, Gantt doldurur; konumlar pencereye göredir (root).
+ */
+class GanttDropTarget {
+    internal var resolver: ((Offset) -> GanttDrop?)? = null
+    fun resolve(rootPosition: Offset): GanttDrop? = resolver?.invoke(rootPosition)
+}
 
 private fun RuzItem.span(): Span = Span(startAt!!, durationMin ?: if (allDay) 1440 else 60)
 
@@ -111,6 +130,7 @@ private fun RuzItem.span(): Span = Span(startAt!!, durationMin ?: if (allDay) 14
  * Gantt şeması. Her iş bir satır, satırlar kategoriye göre gruplu (başlığa dokununca grup kapanır).
  * - Tek parmak: kaydırma. İki parmak: yakınlaştırma (15 dk ↔ haftalar).
  * - Çubuğu basılı tut, sonra sürükle: taşı. Uçlarını basılı tutup çek: başlangıç/süre.
+ * - Çubuğu başka bir çubuğun üstüne bırak: onun arkasına bağlanır (o bitince başlar).
  * - Çubuğa ya da ada dokun: düzenleme paneli.
  * - Fare: tekerlek dikey, Shift+tekerlek yatay kaydırır, Ctrl+tekerlek yakınlaştırır.
  */
@@ -120,9 +140,13 @@ fun GanttChart(
     categories: List<RuzCategory>,
     now: LocalDateTime,
     onOpen: (RuzItem) -> Unit,
-    onReschedule: (item: RuzItem, startAt: Long, durationMin: Int) -> Unit,
+    links: List<RuzLink>,
+    onReschedule: (item: RuzItem, startAt: Long, durationMin: Int, handle: DragHandle) -> Unit,
+    onLink: (item: RuzItem, after: RuzItem) -> Unit,
     modifier: Modifier = Modifier,
     onShowList: (() -> Unit)? = null,
+    dropTarget: GanttDropTarget? = null,
+    externalHover: Offset? = null,
 ) {
     val tz = remember { TimeZone.currentSystemDefault() }
     val density = LocalDensity.current
@@ -133,7 +157,9 @@ fun GanttChart(
     val todayStart = remember(now.date) { now.date.atStartOfDayIn(tz).toEpochMilliseconds() }
     val nowMs = remember(now) { now.toInstant(tz).toEpochMilliseconds() }
 
-    BoxWithConstraints(modifier) {
+    var origin by remember { mutableStateOf(Offset.Zero) }
+
+    BoxWithConstraints(modifier.onGloballyPositioned { origin = it.positionInRoot() }) {
         val px = { v: Float -> with(density) { v.dp.toPx() } }
         val labelW = px(if (maxWidth >= 520.dp) 150f else 104f)
         val headerH = px(44f)
@@ -215,10 +241,38 @@ fun GanttChart(
             }
         }
 
+        /** Bu noktadaki (sürüklenen dışındaki) çubuk: üstüne bırakılınca bağlanır. */
+        fun targetAt(p: Offset, exceptId: String?): RuzItem? {
+            if (p.y < headerH || p.x < labelW) return null
+            val y = p.y - headerH + scrollY
+            val row = rows.firstOrNull { y >= it.top && y < it.top + it.height } as? GanttRow.Task ?: return null
+            if (row.item.id == exceptId) return null
+            val (x0, x1) = barRect(row.item, row.item.span())
+            val tol = px(8f)
+            return if (p.x >= x0 - tol && p.x <= x1 + tol) row.item else null
+        }
+
+        val minCell = px(14f)
+
+        /** Gelen kutusundan sürüklenen öğe için: pencere konumu → Gantt'ta bırakılacak yer. */
+        fun dropAt(root: Offset): GanttDrop? {
+            val p = root - origin
+            if (p.x < labelW || p.y < headerH || p.x > labelW + timelineW || p.y > viewportH) return null
+            targetAt(p, null)?.let { t -> return GanttDrop(t.span().endMs, t.allDay, t) }
+            val time = scale.time(p.x - labelW).toLong()
+            val step = snapStepMinutes(scale.pxPerMin, minCell)
+            return if (step == 1440) GanttDrop(localDayStart(time, tz), true, null)
+            else GanttDrop(snapToStep(time - 30 * 60_000L, step, tz), false, null)
+        }
+        SideEffect { dropTarget?.resolver = ::dropAt }
+        DisposableEffect(dropTarget) { onDispose { dropTarget?.resolver = null } }
+
         val geo by rememberUpdatedState(Geo(labelW, maxScroll, minPpm, maxPpm))
         val latestHit by rememberUpdatedState(::hitTest)
+        val latestTarget by rememberUpdatedState(::targetAt)
         val latestOpen by rememberUpdatedState(onOpen)
         val latestReschedule by rememberUpdatedState(onReschedule)
+        val latestLink by rememberUpdatedState(onLink)
 
         fun onTap(hit: Hit?) {
             when (hit) {
@@ -232,8 +286,6 @@ fun GanttChart(
         fun zoomBy(factor: Float, anchorX: Float) {
             scale = scale.zoomAround(anchorX, factor, geo.minPpm, geo.maxPpm)
         }
-
-        val minCell = px(14f)
 
         Canvas(
             Modifier
@@ -314,14 +366,23 @@ fun GanttChart(
                                 if (c == null || !c.pressed) break
                                 dx += c.positionChange().x
                                 c.consume()
-                                val step = if (bh.item.allDay) 1440 else snapStepMinutes(scale.pxPerMin, minCell)
-                                val deltaMs = dx / scale.pxPerMin * 60_000.0
-                                drag = DragPreview(bh.item.id, bh.handle, applyDrag(original, bh.handle, deltaMs, step, tz))
+                                val target = if (bh.handle == DragHandle.Move) latestTarget(c.position, bh.item.id) else null
+                                drag = if (target != null) {
+                                    DragPreview(bh.item.id, bh.handle, original, target)
+                                } else {
+                                    val step = if (bh.item.allDay) 1440 else snapStepMinutes(scale.pxPerMin, minCell)
+                                    val deltaMs = dx / scale.pxPerMin * 60_000.0
+                                    DragPreview(bh.item.id, bh.handle, applyDrag(original, bh.handle, deltaMs, step, tz))
+                                }
                             }
                             val final = drag
                             drag = null
-                            if (final != null && final.span != original) {
-                                latestReschedule(bh.item, final.span.startMs, final.span.durationMin)
+                            val linkTo = final?.linkTarget
+                            when {
+                                final == null -> Unit
+                                linkTo != null -> latestLink(bh.item, linkTo)
+                                final.span != original ->
+                                    latestReschedule(bh.item, final.span.startMs, final.span.durationMin, bh.handle)
                             }
                         }
                     }
@@ -354,8 +415,26 @@ fun GanttChart(
                 drawDays(ctx, colors.primaryContainer.copy(alpha = 0.30f), colors.surfaceVariant.copy(alpha = 0.45f), colors.outlineVariant)
             }
 
+            val hover = externalHover?.let { dropAt(it) }
+            val highlightId = drag?.linkTarget?.id ?: hover?.onto?.id
+            fun spanFor(item: RuzItem): Span =
+                drag?.takeIf { it.itemId == item.id && it.linkTarget == null }?.span ?: item.span()
+
             // ---- satırlar ----
             clipRect(left = 0f, top = headerH) {
+                // Bağ okları: öncülün bitişinden ardılın başına.
+                val taskRows = rows.filterIsInstance<GanttRow.Task>().associateBy { it.item.id }
+                clipRect(left = labelW) {
+                    links.forEach { l ->
+                        val pr = taskRows[l.predecessorId] ?: return@forEach
+                        val sr = taskRows[l.successorId] ?: return@forEach
+                        val px1 = barRect(pr.item, spanFor(pr.item)).second
+                        val sx0 = barRect(sr.item, spanFor(sr.item)).first
+                        val yP = headerH + pr.top - scrollY + pr.height / 2f
+                        val yS = headerH + sr.top - scrollY + sr.height / 2f
+                        drawLinkArrow(ctx, px1, yP, sx0, yS, barH, colors.onSurfaceVariant.copy(alpha = 0.8f))
+                    }
+                }
                 rows.forEach { row ->
                     val top = headerH + row.top - scrollY
                     if (top > size.height || top + row.height < headerH) return@forEach
@@ -367,9 +446,18 @@ fun GanttChart(
                         )
                         is GanttRow.Task -> {
                             val preview = drag?.takeIf { it.itemId == row.item.id }
-                            val span = preview?.span ?: row.item.span()
-                            val (x0, x1) = barRect(row.item, span)
+                            val (x0, x1) = barRect(row.item, spanFor(row.item))
                             clipRect(left = labelW) {
+                                if (row.item.id == highlightId) {
+                                    val pad = px(4f)
+                                    drawRoundRect(
+                                        colors.secondary,
+                                        topLeft = Offset(x0 - pad, top + (row.height - barH) / 2f - pad),
+                                        size = Size(x1 - x0 + pad * 2, barH + pad * 2),
+                                        cornerRadius = CornerRadius(px(8f)),
+                                        style = Stroke(width = px(3f)),
+                                    )
+                                }
                                 drawBar(ctx, row, x0, x1, top, barH, preview != null, colors.outline)
                             }
                         }
@@ -401,10 +489,21 @@ fun GanttChart(
             }
             drawLine(colors.outlineVariant, Offset(labelW, 0f), Offset(labelW, size.height), strokeWidth = 1f)
 
+            // ---- dışarıdan sürüklenen öğenin bırakılacağı an ----
+            if (hover != null && hover.onto == null) {
+                val hx = labelW + s.x(hover.startMs)
+                drawLine(colors.secondary, Offset(hx, headerH), Offset(hx, size.height), strokeWidth = px(3f))
+            }
+
             // ---- sürüklerken zaman balonu ----
             drag?.let { d ->
                 val row = rows.firstOrNull { it is GanttRow.Task && it.item.id == d.itemId } as? GanttRow.Task
-                if (row != null) drawDragTooltip(ctx, row, d.span, headerH + row.top - scrollY, colors.inverseSurface, colors.inverseOnSurface)
+                if (row != null) {
+                    drawDragTooltip(
+                        ctx, row, d.span, headerH + row.top - scrollY, colors.inverseSurface, colors.inverseOnSurface,
+                        override = d.linkTarget?.let { "→ " + it.text + " bitince başlar" },
+                    )
+                }
             }
 
             if (rows.isEmpty()) {
@@ -650,10 +749,20 @@ private fun DrawScope.drawLabel(ctx: DrawCtx, row: GanttRow, top: Float, pad: Fl
     }
 }
 
-private fun DrawScope.drawDragTooltip(ctx: DrawCtx, row: GanttRow.Task, span: Span, rowTop: Float, bg: Color, fg: Color) {
+private fun DrawScope.drawDragTooltip(
+    ctx: DrawCtx,
+    row: GanttRow.Task,
+    span: Span,
+    rowTop: Float,
+    bg: Color,
+    fg: Color,
+    override: String? = null,
+) {
     val start = epochToLocal(span.startMs)
     val end = epochToLocal(span.endMs)
-    val label = if (row.item.allDay) {
+    val label = if (override != null) {
+        override
+    } else if (row.item.allDay) {
         val lastDay = epochToLocal(span.endMs - 1).date
         val a = "${TurkishDayShort[start.date.dayOfWeek.isoDayNumber - 1]} ${start.date.day} ${TurkishMonthShort[start.date.month.ordinal]}"
         if (lastDay == start.date) a
@@ -671,4 +780,35 @@ private fun DrawScope.drawDragTooltip(ctx: DrawCtx, row: GanttRow.Task, span: Sp
     val y = max(ctx.headerH + ctx.px(2f), rowTop - h - ctx.px(2f))
     drawRoundRect(bg, topLeft = Offset(x, y), size = Size(w, h), cornerRadius = CornerRadius(ctx.px(6f)))
     drawText(l, topLeft = Offset(x + padH, y + padV))
+}
+
+/** Öncülün bitişinden ardılın başına dirsekli ok. */
+private fun DrawScope.drawLinkArrow(ctx: DrawCtx, x1: Float, yP: Float, x0: Float, yS: Float, barH: Float, color: Color) {
+    val gap = ctx.px(8f)
+    val path = Path()
+    if (x0 >= x1 + gap * 2) {
+        val mid = x1 + gap
+        path.moveTo(x1, yP)
+        path.lineTo(mid, yP)
+        path.lineTo(mid, yS)
+        path.lineTo(x0, yS)
+    } else {
+        // Ardıl hemen bitişte başlıyor: öncülün ucundan aşağı in, sonra ardılın başına gir.
+        val down = if (yS > yP) barH / 2f else -barH / 2f
+        path.moveTo(x1, yP + down)
+        path.lineTo(x1, yS)
+        if (x1 > x0 - gap) {
+            path.moveTo(x0 - gap, yS)
+        }
+        path.lineTo(x0, yS)
+    }
+    drawPath(path, color, style = Stroke(width = ctx.px(1.5f)))
+    val a = ctx.px(5f)
+    val head = Path().apply {
+        moveTo(x0, yS)
+        lineTo(x0 - a * 1.4f, yS - a)
+        lineTo(x0 - a * 1.4f, yS + a)
+        close()
+    }
+    drawPath(head, color)
 }

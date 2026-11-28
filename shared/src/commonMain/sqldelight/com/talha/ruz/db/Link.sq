@@ -11,3 +11,11 @@ CREATE TABLE link (
 
 selectActive:
 SELECT * FROM link WHERE deleted_at IS NULL;
+
+-- Silinmiş aynı bağ varsa yerine yenisi yazılır (UNIQUE çakışmasın).
+insert:
+INSERT OR REPLACE INTO link(id, predecessor_id, successor_id, created_at, updated_at, deleted_at)
+VALUES (:id, :predecessorId, :successorId, :now, :now, NULL);
+
+softDelete:
+UPDATE link SET deleted_at = :now, updated_at = :now WHERE id = :id;

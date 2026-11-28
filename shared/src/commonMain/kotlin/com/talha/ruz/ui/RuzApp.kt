@@ -42,6 +42,23 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.talha.ruz.data.CategoryPalette
 import com.talha.ruz.data.ItemFields
+import com.talha.ruz.data.PlanChange
+import com.talha.ruz.data.Schedule
+import com.talha.ruz.data.planChange
+import com.talha.ruz.data.spanOrNull
+import com.talha.ruz.gantt.DragHandle
+import com.talha.ruz.gantt.SchedLink
+import com.talha.ruz.gantt.Scheduler
+import com.talha.ruz.gantt.localDayStart
+import com.talha.ruz.ui.gantt.GanttDrop
+import com.talha.ruz.ui.gantt.GanttDropTarget
+import com.talha.ruz.ui.inbox.ItemDragCallbacks
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
+import kotlin.time.Clock
 import com.talha.ruz.data.RuzCategory
 import com.talha.ruz.data.RuzItem
 import com.talha.ruz.parse.ParsedCapture
@@ -114,6 +131,12 @@ private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit) {
 
     val categories by repo.categories.collectAsState(initial = emptyList())
     val items by repo.items.collectAsState(initial = emptyList())
+    val links by repo.links.collectAsState(initial = emptyList())
+    // Gelen kutusundan Gantt'a sürüklenen öğe ve parmağın pencere konumu.
+    var dragItem by remember { mutableStateOf<RuzItem?>(null) }
+    var dragPos by remember { mutableStateOf<Offset?>(null) }
+    val dropTarget = remember { GanttDropTarget() }
+    val tz = remember { TimeZone.currentSystemDefault() }
     val now = rememberNow()
     val today = now.date
     val snackbar = remember { SnackbarHostState() }
@@ -158,13 +181,96 @@ private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit) {
     }
 
     /** Gantt'ta taşınan/uzatılan iş; "Geri al" eski zamana döndürür. */
-    fun reschedule(item: RuzItem, startAt: Long, durationMin: Int) {
-        fun fields(start: Long?, duration: Int?) =
-            ItemFields(item.text, item.categoryId, start, duration, item.allDay, item.isMilestone)
-        scope.launch { repo.updateItem(item.id, fields(startAt, durationMin)) }
-        val label = whenLabel(item.copy(startAt = startAt, durationMin = durationMin), today) ?: ""
-        notify("${item.text} · $label") { repo.updateItem(item.id, fields(item.startAt, item.durationMin)) }
+    /** Plan değişikliğini yazar; "Geri al" zamanları ve bağları eski hâline döndürür. */
+    fun commit(change: PlanChange, message: String) {
+        scope.launch {
+            change.removeLinks.forEach { repo.deleteLink(it.id) }
+            val newLinkId = change.addLink?.let { (a, b) -> repo.addLink(a, b) }
+            repo.setSchedules(change.schedules)
+            notify(message) {
+                newLinkId?.let { repo.deleteLink(it) }
+                change.removeLinks.forEach { repo.addLink(it.predecessorId, it.successorId) }
+                repo.setSchedules(change.previous)
+            }
+        }
     }
+
+    fun movedSuffix(change: PlanChange, mainId: String): String {
+        val others = change.schedules.keys.count { it != mainId }
+        return if (others > 0) " · $others bağlı iş kaydı" else ""
+    }
+
+    /** Gantt'ta taşınan/uzatılan iş. Bağlı bir iş elle taşınırsa önceki işten ayrılır. */
+    fun reschedule(item: RuzItem, startAt: Long, durationMin: Int, handle: DragHandle) {
+        val incoming = links.filter { it.successorId == item.id }
+        val detach = handle != DragHandle.End && incoming.isNotEmpty()
+        val change = planChange(
+            items, links, mapOf(item.id to Schedule(startAt, durationMin, item.allDay)), tz,
+            removeLinks = if (detach) incoming else emptyList(),
+        )
+        val label = whenLabel(item.copy(startAt = startAt, durationMin = durationMin), today) ?: ""
+        commit(change, "${item.text} · $label" + (if (detach) " · bağı kaldırıldı" else "") + movedSuffix(change, item.id))
+    }
+
+    /** [item]'ı [after]'ın arkasına bağlar (o bitince başlar). Eski öncül bağları kalkar. */
+    fun link(item: RuzItem, after: RuzItem, overrides: Map<String, Schedule> = emptyMap()) {
+        val incoming = links.filter { it.successorId == item.id }
+        val rest = links.filter { it.successorId != item.id }.map { SchedLink(it.predecessorId, it.successorId) }
+        if (Scheduler.createsCycle(rest, after.id, item.id)) {
+            notify("Bağlanamaz: \"${after.text}\" zaten \"${item.text}\" işine bağlı.")
+            return
+        }
+        val change = planChange(items, links, overrides, tz, removeLinks = incoming, addLink = after.id to item.id)
+        commit(change, "${item.text} → ${after.text} bitince başlar" + movedSuffix(change, item.id))
+    }
+
+    /** Gelen kutusundaki öğeyi bugünün ilk boş saatine (yoksa yarın sabaha) koyar. */
+    fun addToPlan(item: RuzItem) {
+        val nowMs = Clock.System.now().toEpochMilliseconds()
+        val quarter = 15 * 60_000L
+        val from = (nowMs / quarter + 1) * quarter
+        val todayStart = localDayStart(nowMs, tz)
+        val busy = items.filter { !it.done && !it.allDay && it.id != item.id }.mapNotNull { it.spanOrNull() }
+        val day = 86_400_000L
+        val slot = Scheduler.firstFreeSlot(busy, from, 60, todayStart + 22 * 3_600_000L)
+            ?: Scheduler.firstFreeSlot(busy, todayStart + day + 9 * 3_600_000L, 60, todayStart + day + 22 * 3_600_000L)
+            ?: (todayStart + day + 9 * 3_600_000L)
+        val change = planChange(items, links, mapOf(item.id to Schedule(slot, 60, false)), tz)
+        val label = whenLabel(item.copy(startAt = slot, durationMin = 60, allDay = false), today) ?: ""
+        commit(change, "Plana eklendi · $label")
+    }
+
+    /** Gelen kutusundan Gantt'a bırakılan öğe: çubuğun üstüne bırakıldıysa onun arkasına bağlanır. */
+    fun dropFromInbox(item: RuzItem, drop: GanttDrop) {
+        val schedule = Schedule(drop.startMs, if (drop.allDay) 1440 else 60, drop.allDay)
+        val onto = drop.onto
+        if (onto != null) {
+            link(item, onto, overrides = mapOf(item.id to schedule))
+        } else {
+            val change = planChange(items, links, mapOf(item.id to schedule), tz)
+            val label = whenLabel(item.copy(startAt = schedule.startAt, durationMin = schedule.durationMin, allDay = schedule.allDay), today) ?: ""
+            commit(change, "Plana eklendi · $label")
+        }
+    }
+
+    val inboxDrag = ItemDragCallbacks(
+        onStart = { item, pos ->
+            dragItem = item
+            dragPos = pos
+        },
+        onMove = { pos -> dragPos = pos },
+        onEnd = { item, pos ->
+            val drop = dropTarget.resolve(pos)
+            dragItem = null
+            dragPos = null
+            if (drop != null) dropFromInbox(item, drop)
+            drop != null
+        },
+        onCancel = {
+            dragItem = null
+            dragPos = null
+        },
+    )
 
     fun submit(p: ParsedCapture, defaultCategory: RuzCategory?) {
         if (p.isQuestion) {
@@ -284,7 +390,15 @@ private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit) {
 
             @Composable
             fun Inbox(m: Modifier) {
-                InboxPane(inboxItems, today, ::toggleDone, onOpen = { editingItemId = it.id }, modifier = m)
+                InboxPane(
+                    inboxItems,
+                    today,
+                    ::toggleDone,
+                    onOpen = { editingItemId = it.id },
+                    modifier = m,
+                    drag = inboxDrag,
+                    onAddToPlan = ::addToPlan,
+                )
             }
 
             @Composable
@@ -294,8 +408,12 @@ private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit) {
                     categories = categories,
                     now = now,
                     onOpen = { editingItemId = it.id },
+                    links = links,
                     onReschedule = ::reschedule,
+                    onLink = { item, after -> link(item, after) },
                     modifier = m,
+                    dropTarget = dropTarget,
+                    externalHover = dragPos,
                 )
             }
 
@@ -321,6 +439,25 @@ private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit) {
                 }
             }
         }
+
+        // Sürüklenen öğenin parmağı izleyen etiketi.
+        val ghost = dragItem
+        val gp = dragPos
+        if (ghost != null && gp != null) {
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.inverseSurface,
+                shadowElevation = 6.dp,
+                modifier = Modifier.offset { IntOffset(gp.x.roundToInt() - 24, gp.y.roundToInt() - 64) },
+            ) {
+                Text(
+                    ghost.text,
+                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                    maxLines = 1,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+        }
     }
 
     if (editingItem != null) {
@@ -330,7 +467,21 @@ private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit) {
             onDismiss = { editingItemId = null },
             onSave = { fields ->
                 editingItemId = null
-                scope.launch { repo.updateItem(editingItem.id, fields) }
+                scope.launch {
+                    repo.updateItem(editingItem.id, fields)
+                    // Zamanı değiştiyse arkasındaki bağlı işler de kayar.
+                    val override = Schedule(fields.startAt, fields.durationMin, fields.allDay)
+                    val change = planChange(items, links, mapOf(editingItem.id to override), tz)
+                    val others = change.schedules - editingItem.id
+                    if (others.isNotEmpty()) repo.setSchedules(others)
+                }
+            },
+            predecessors = links.filter { it.successorId == editingItem.id }
+                .mapNotNull { l -> items.firstOrNull { it.id == l.predecessorId }?.let { l to it } },
+            successors = links.filter { it.predecessorId == editingItem.id }
+                .mapNotNull { l -> items.firstOrNull { it.id == l.successorId }?.let { l to it } },
+            onRemoveLink = { l ->
+                commit(planChange(items, links, emptyMap(), tz, removeLinks = listOf(l)), "Bağ kaldırıldı")
             },
             onToggleDone = { done -> toggleDone(editingItem.id, done) },
             onDelete = { deleteItem(editingItem) },

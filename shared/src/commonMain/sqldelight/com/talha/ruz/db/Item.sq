@@ -57,3 +57,6 @@ UPDATE item SET deleted_at = :now, updated_at = :now WHERE id = :id;
 
 restore:
 UPDATE item SET deleted_at = NULL, updated_at = :now WHERE id = :id;
+
+setSchedule:
+UPDATE item SET start_at = :startAt, duration_min = :durationMin, all_day = :allDay, updated_at = :now WHERE id = :id;

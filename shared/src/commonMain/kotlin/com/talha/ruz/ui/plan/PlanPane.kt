@@ -40,6 +40,10 @@ import com.talha.ruz.data.RuzItem
 import com.talha.ruz.ui.dayLabel
 import com.talha.ruz.ui.epochToLocal
 import com.talha.ruz.ui.gantt.GanttChart
+import com.talha.ruz.ui.gantt.GanttDropTarget
+import com.talha.ruz.data.RuzLink
+import com.talha.ruz.gantt.DragHandle
+import androidx.compose.ui.geometry.Offset
 import com.talha.ruz.ui.timeRangeLabel
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -54,8 +58,12 @@ fun PlanPane(
     categories: List<RuzCategory>,
     now: LocalDateTime,
     onOpen: (RuzItem) -> Unit,
-    onReschedule: (item: RuzItem, startAt: Long, durationMin: Int) -> Unit,
+    links: List<RuzLink>,
+    onReschedule: (item: RuzItem, startAt: Long, durationMin: Int, handle: DragHandle) -> Unit,
+    onLink: (item: RuzItem, after: RuzItem) -> Unit,
     modifier: Modifier = Modifier,
+    dropTarget: GanttDropTarget? = null,
+    externalHover: Offset? = null,
 ) {
     var asList by rememberSaveable { mutableStateOf(false) }
     if (!asList) {
@@ -64,9 +72,13 @@ fun PlanPane(
             categories = categories,
             now = now,
             onOpen = onOpen,
+            links = links,
             onReschedule = onReschedule,
+            onLink = onLink,
             modifier = modifier,
             onShowList = { asList = true },
+            dropTarget = dropTarget,
+            externalHover = externalHover,
         )
         return
     }

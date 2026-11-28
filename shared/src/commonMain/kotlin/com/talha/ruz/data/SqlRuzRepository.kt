@@ -146,6 +146,31 @@ class SqlRuzRepository(
         }
     }
 
+    override suspend fun setSchedules(changes: Map<String, Schedule>): Unit = withContext(io) {
+        val now = nowMillis()
+        db.transaction {
+            changes.forEach { (id, s) ->
+                db.itemQueries.setSchedule(
+                    startAt = s.startAt,
+                    durationMin = s.durationMin?.toLong(),
+                    allDay = s.allDay,
+                    now = now,
+                    id = id,
+                )
+            }
+        }
+    }
+
+    override suspend fun addLink(predecessorId: String, successorId: String): String = withContext(io) {
+        val id = newId()
+        db.linkQueries.insert(id = id, predecessorId = predecessorId, successorId = successorId, now = nowMillis())
+        id
+    }
+
+    override suspend fun deleteLink(id: String): Unit = withContext(io) {
+        db.linkQueries.softDelete(now = nowMillis(), id = id)
+    }
+
     private fun nextColor(used: List<Long>): Long =
         CategoryPalette.firstOrNull { it !in used } ?: CategoryPalette[used.size % CategoryPalette.size]
 }

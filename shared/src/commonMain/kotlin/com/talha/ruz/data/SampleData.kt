@@ -53,7 +53,8 @@ fun sampleRepository(today: LocalDate, timeZone: TimeZone): MemoryRuzRepository 
         item("Pompa firmasını ara", "İş", at(0, 9, 0), 30),
         item("Şantiye toplantısı", "İş", at(0, 14, 0), 90),
         item("Hakediş raporu hazırla", "İş", at(1, 9, 0), 180),
-        item("Beton dökümü", "İş", at(2, 8, 0), 360),
+        item("Kalıp ve donatı kontrolü", "İş", at(1, 13, 0), 120),
+        item("Beton dökümü", "İş", at(1, 15, 0), 360),
         item("KDV beyannamesi teslimi", "Ödemeler", at(3), 1440, allDay = true, milestone = true),
         item("Elektrik faturası", "Ödemeler", at(10), 1440, allDay = true, milestone = true),
         item("Arabanın yağını değiştirt", "Genel", at(4), 1440, allDay = true),
@@ -65,5 +66,8 @@ fun sampleRepository(today: LocalDate, timeZone: TimeZone): MemoryRuzRepository 
         item("Teras için dikey bahçe", "Fikirler"),
         item("Dünkü kontrol listesi", "İş", at(-1, 16, 0), 60),
     )
-    return MemoryRuzRepository(cats, items)
+    // Örnek zincir: kalıp kontrolü bitince beton dökümü başlar.
+    val kalip = items.first { it.text.startsWith("Kalıp") }.id
+    val beton = items.first { it.text == "Beton dökümü" }.id
+    return MemoryRuzRepository(cats, items, listOf(RuzLink("l0", kalip, beton)))
 }

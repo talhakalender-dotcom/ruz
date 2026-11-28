@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.update
 class MemoryRuzRepository(
     initialCategories: List<RuzCategory> = emptyList(),
     initialItems: List<RuzItem> = emptyList(),
+    initialLinks: List<RuzLink> = emptyList(),
 ) : RuzRepository {
     private data class Cat(val c: RuzCategory, val deleted: Boolean = false)
     private data class It(val i: RuzItem, val deleted: Boolean = false)
@@ -25,7 +26,8 @@ class MemoryRuzRepository(
     override val items: Flow<List<RuzItem>> =
         its.map { list -> list.filter { !it.deleted }.map { it.i }.sortedWith(compareBy({ it.order }, { it.createdAt })) }
 
-    override val links: Flow<List<RuzLink>> = MutableStateFlow(emptyList())
+    private val linkState = MutableStateFlow(initialLinks)
+    override val links: Flow<List<RuzLink>> = linkState
 
     override suspend fun seedIfEmpty() {
         if (cats.value.isNotEmpty()) return
@@ -121,6 +123,28 @@ class MemoryRuzRepository(
         its.update { list -> list.map { if (it.i.id in moved) it.copy(i = it.i.copy(categoryId = null)) else it } }
         editCategory(id) { it.copy(deleted = true) }
         return moved
+    }
+
+    override suspend fun setSchedules(changes: Map<String, Schedule>) {
+        its.update { list ->
+            list.map { e ->
+                val s = changes[e.i.id] ?: return@map e
+                e.copy(i = e.i.copy(startAt = s.startAt, durationMin = s.durationMin, allDay = s.allDay))
+            }
+        }
+    }
+
+    override suspend fun addLink(predecessorId: String, successorId: String): String {
+        val id = newId()
+        linkState.update { list ->
+            list.filterNot { it.predecessorId == predecessorId && it.successorId == successorId } +
+                RuzLink(id, predecessorId, successorId)
+        }
+        return id
+    }
+
+    override suspend fun deleteLink(id: String) {
+        linkState.update { list -> list.filterNot { it.id == id } }
     }
 
     override suspend fun restoreCategory(id: String, itemIds: List<String>) {
