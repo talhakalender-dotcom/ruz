@@ -65,6 +65,7 @@ class SqlRuzRepository(
             allDay = fields.allDay,
             reminderMinBefore = fields.reminderMinBefore?.toLong(),
             seriesId = null,
+            amountKurus = fields.amountKurus,
         )
         id
     }
@@ -78,6 +79,7 @@ class SqlRuzRepository(
             allDay = fields.allDay,
             isMilestone = fields.isMilestone,
             reminderMinBefore = fields.reminderMinBefore?.toLong(),
+            amountKurus = fields.amountKurus,
             now = nowMillis(),
             id = id,
         )
@@ -197,6 +199,7 @@ class SqlRuzRepository(
                 isMilestone = template.isMilestone,
                 reminderMinBefore = template.reminderMinBefore,
                 generatedUntil = initialGeneratedUntil(first.date),
+                amountKurus = template.amountKurus,
             )
             db.transaction {
                 db.seriesQueries.insert(
@@ -211,6 +214,7 @@ class SqlRuzRepository(
                     reminderMinBefore = s.reminderMinBefore?.toLong(),
                     generatedUntil = s.generatedUntil.toString(),
                     now = nowMillis(),
+                    amountKurus = s.amountKurus,
                 )
                 generate(s, first.date, timeZone)
             }
@@ -242,6 +246,7 @@ class SqlRuzRepository(
                 allDay = s.timeMin == null,
                 reminderMinBefore = s.reminderMinBefore?.toLong(),
                 seriesId = s.id,
+                amountKurus = s.amountKurus,
             )
         }
         db.seriesQueries.setGeneratedUntil(generatedUntil = until.toString(), now = now, id = s.id)
@@ -276,6 +281,7 @@ private fun Item.toDomain() = RuzItem(
     order = sort_order,
     createdAt = created_at,
     seriesId = series_id,
+    amountKurus = amount_kurus,
 )
 
 private fun Series.toDomain(): RuzSeries? {
@@ -291,6 +297,7 @@ private fun Series.toDomain(): RuzSeries? {
         isMilestone = is_milestone,
         reminderMinBefore = reminder_min_before?.toInt(),
         generatedUntil = LocalDate.parse(generated_until),
+        amountKurus = amount_kurus,
     )
 }
 

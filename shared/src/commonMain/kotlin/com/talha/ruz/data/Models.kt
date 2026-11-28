@@ -32,6 +32,8 @@ data class RuzItem(
     val createdAt: Long,
     /** Tekrar eden bir serinin tekrarıysa serinin kimliği. */
     val seriesId: String? = null,
+    /** Harcama/ödeme tutarı (kuruş). */
+    val amountKurus: Long? = null,
 ) {
     val isScheduled: Boolean get() = startAt != null
     val inInbox: Boolean get() = categoryId == null

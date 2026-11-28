@@ -15,6 +15,8 @@ data class ItemFields(
     val isMilestone: Boolean,
     /** Hatırlatma: null = varsayılan (15 dk önce / tam günde 09:00), -1 = kapalı, diğerleri dakika. */
     val reminderMinBefore: Int? = null,
+    /** Harcama/ödeme tutarı (kuruş). */
+    val amountKurus: Long? = null,
 )
 
 /** Bir işin Gantt'taki yeri. [startAt] null ise plandan çıkar. */

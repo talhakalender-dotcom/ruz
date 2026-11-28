@@ -18,7 +18,8 @@ CREATE TABLE item (
     updated_at INTEGER NOT NULL,
     deleted_at INTEGER,
     all_day INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
-    series_id TEXT
+    series_id TEXT,
+    amount_kurus INTEGER
 );
 
 CREATE INDEX item_category ON item(category_id);
@@ -32,13 +33,14 @@ SELECT coalesce(min(sort_order), 0.0) FROM item WHERE deleted_at IS NULL;
 
 insert:
 INSERT INTO item(id, text, note, category_id, done, done_at, start_at, duration_min, is_milestone,
-                 reminder_min_before, sort_order, created_at, updated_at, deleted_at, all_day, series_id)
+                 reminder_min_before, sort_order, created_at, updated_at, deleted_at, all_day, series_id, amount_kurus)
 VALUES (:id, :text, '', :categoryId, 0, NULL, :startAt, :durationMin, :isMilestone,
-        :reminderMinBefore, :sortOrder, :now, :now, NULL, :allDay, :seriesId);
+        :reminderMinBefore, :sortOrder, :now, :now, NULL, :allDay, :seriesId, :amountKurus);
 
 update:
 UPDATE item SET text = :text, category_id = :categoryId, start_at = :startAt, duration_min = :durationMin,
-                all_day = :allDay, is_milestone = :isMilestone, reminder_min_before = :reminderMinBefore, updated_at = :now
+                all_day = :allDay, is_milestone = :isMilestone, reminder_min_before = :reminderMinBefore,
+                amount_kurus = :amountKurus, updated_at = :now
 WHERE id = :id;
 
 setDone:

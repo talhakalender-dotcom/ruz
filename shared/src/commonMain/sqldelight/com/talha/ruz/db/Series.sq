@@ -14,7 +14,8 @@ CREATE TABLE series (
     generated_until TEXT NOT NULL,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
-    deleted_at INTEGER
+    deleted_at INTEGER,
+    amount_kurus INTEGER
 );
 
 selectActive:
@@ -22,9 +23,9 @@ SELECT * FROM series WHERE deleted_at IS NULL;
 
 insert:
 INSERT INTO series(id, rule, text, category_id, anchor_day, time_min, duration_min, is_milestone,
-                   reminder_min_before, generated_until, created_at, updated_at, deleted_at)
+                   reminder_min_before, generated_until, created_at, updated_at, deleted_at, amount_kurus)
 VALUES (:id, :rule, :text, :categoryId, :anchorDay, :timeMin, :durationMin, :isMilestone,
-        :reminderMinBefore, :generatedUntil, :now, :now, NULL);
+        :reminderMinBefore, :generatedUntil, :now, :now, NULL, :amountKurus);
 
 setGeneratedUntil:
 UPDATE series SET generated_until = :generatedUntil, updated_at = :now WHERE id = :id;

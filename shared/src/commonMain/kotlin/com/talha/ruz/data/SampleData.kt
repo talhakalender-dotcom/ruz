@@ -32,6 +32,7 @@ fun sampleRepository(today: LocalDate, timeZone: TimeZone): MemoryRuzRepository 
         allDay: Boolean = false,
         milestone: Boolean = false,
         done: Boolean = false,
+        amount: Long? = null,
     ) = RuzItem(
         id = "s${order.toInt()}",
         text = text,
@@ -46,6 +47,7 @@ fun sampleRepository(today: LocalDate, timeZone: TimeZone): MemoryRuzRepository 
         reminderMinBefore = null,
         order = order++,
         createdAt = at(0),
+        amountKurus = amount,
     )
 
     val items = listOf(
@@ -58,11 +60,13 @@ fun sampleRepository(today: LocalDate, timeZone: TimeZone): MemoryRuzRepository 
         item("Kalıp ve donatı kontrolü", "İş", at(1, 13, 0), 120),
         item("Beton dökümü", "İş", at(1, 15, 0), 360),
         item("KDV beyannamesi teslimi", "Ödemeler", at(3), 1440, allDay = true, milestone = true),
-        item("Elektrik faturası", "Ödemeler", at(10), 1440, allDay = true, milestone = true),
+        item("Elektrik faturası", "Ödemeler", at(10), 1440, allDay = true, milestone = true, amount = 1_240_00),
         item("Arabanın yağını değiştirt", "Genel", at(4), 1440, allDay = true),
         item("Süt", "Alışveriş"),
         item("Yumurta", "Alışveriş"),
         item("Ekmek", "Alışveriş", done = true),
+        item("Market alışverişi", "Alışveriş", done = true, amount = 850_00),
+        item("Taksi", "Genel", done = true, amount = 180_00),
         item("Deterjan", "Alışveriş"),
         item("Suç ve Ceza'yı okumaya başla", "Fikirler"),
         item("Teras için dikey bahçe", "Fikirler"),
@@ -76,7 +80,7 @@ fun sampleRepository(today: LocalDate, timeZone: TimeZone): MemoryRuzRepository 
         RuzSeries(
             id = "r0", rule = Recurrence(Freq.Monthly, monthDay = 15), text = "Kira", categoryId = cat("Ödemeler"),
             anchorDay = today, timeMin = null, durationMin = 1440, isMilestone = true, reminderMinBefore = null,
-            generatedUntil = initialGeneratedUntil(today),
+            generatedUntil = initialGeneratedUntil(today), amountKurus = 15_000_00,
         ),
         RuzSeries(
             id = "r1", rule = Recurrence(Freq.Weekly, weekdays = setOf(1)), text = "Şantiye koordinasyon toplantısı",

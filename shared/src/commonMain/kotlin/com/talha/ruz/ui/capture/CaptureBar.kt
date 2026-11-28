@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import com.talha.ruz.data.CategoryPalette
 import com.talha.ruz.data.RuzCategory
 import com.talha.ruz.parse.ChipKind
+import com.talha.ruz.money.Money
 import com.talha.ruz.parse.ParsedCapture
 import com.talha.ruz.parse.TrDateParser
 import com.talha.ruz.platform.rememberSpeechInput
@@ -162,6 +163,7 @@ private fun PreviewChips(
         }
         if (parsed.isMilestone) RemovableChip("◆ Son tarih") { onRemove(ChipKind.Milestone) }
         parsed.recurrence?.let { RemovableChip("↻ " + it.label()) { onRemove(ChipKind.Repeat) } }
+        parsed.amountKurus?.let { RemovableChip(Money.format(it)) { onRemove(ChipKind.Amount) } }
 
         val catName = parsed.categoryName
         if (catName != null) {

@@ -50,6 +50,7 @@ import com.talha.ruz.data.RuzCategory
 import com.talha.ruz.data.RuzItem
 import com.talha.ruz.data.RuzLink
 import com.talha.ruz.remind.ReminderDefaults
+import com.talha.ruz.money.Money
 import com.talha.ruz.ui.dayLabel
 import com.talha.ruz.ui.durationLabel
 import com.talha.ruz.ui.epochToLocal
@@ -92,6 +93,7 @@ fun ItemEditSheet(
     var duration by remember(item.id) { mutableStateOf(if (item.allDay) null else item.durationMin) }
     var milestone by remember(item.id) { mutableStateOf(item.isMilestone) }
     var reminder by remember(item.id) { mutableStateOf(item.reminderMinBefore) }
+    var amountText by remember(item.id) { mutableStateOf(item.amountKurus?.let { Money.format(it).removeSuffix(" ₺") } ?: "") }
     var pickDate by remember { mutableStateOf(false) }
     var pickTime by remember { mutableStateOf(false) }
     val today = localNow().date
@@ -118,6 +120,15 @@ fun ItemEditSheet(
                 value = text,
                 onValueChange = { text = it },
                 label = { Text("Metin") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            OutlinedTextField(
+                value = amountText,
+                onValueChange = { amountText = it },
+                label = { Text("Tutar (₺) · harcama/ödeme") },
+                singleLine = true,
+                isError = amountText.isNotBlank() && Money.parse(amountText) == null,
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -252,6 +263,7 @@ fun ItemEditSheet(
                                 isMilestone = d != null && milestone,
                                 // Tam günde yalnız "açık/kapalı" var; dakika değeri saat silinince varsayılana döner.
                                 reminderMinBefore = if (t == null && reminder != ReminderDefaults.OFF) null else reminder,
+                                amountKurus = Money.parse(amountText),
                             ),
                         )
                     },

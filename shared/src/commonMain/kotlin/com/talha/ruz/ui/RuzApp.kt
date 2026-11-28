@@ -42,6 +42,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.talha.ruz.data.CategoryPalette
 import com.talha.ruz.data.ItemFields
+import com.talha.ruz.money.Money
+import com.talha.ruz.ui.expenses.ExpensesPane
+import androidx.compose.material.icons.filled.ShoppingCart
 import com.talha.ruz.data.collapseSeries
 import com.talha.ruz.ai.QuestionAnswer
 import com.talha.ruz.ai.QuestionAnswerer
@@ -86,7 +89,11 @@ private enum class Tab(val label: String, val icon: ImageVector) {
     Plan("Plan", Icons.Filled.DateRange),
     Inbox("Gelen kutusu", Icons.AutoMirrored.Filled.List),
     Categories("Kategoriler", Icons.Filled.Menu),
+    Expenses("Harcamalar", Icons.Filled.ShoppingCart),
 }
+
+/** Fold açıkken sol paneldeki bölümler. */
+private val LeftTabs = listOf(Tab.Inbox, Tab.Categories, Tab.Expenses)
 
 private enum class Overlay { None, Settings, NanoTest }
 
@@ -312,20 +319,22 @@ private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit) {
                 durationMin = duration,
                 allDay = p.allDay,
                 isMilestone = p.isMilestone,
+                amountKurus = p.amountKurus,
             )
             val whenText = p.date?.let { d ->
                 dayLabel(d, today) + (p.time?.let { " " + hhmm(it) } ?: "")
             }
+            val amountText = p.amountKurus?.let { Money.format(it) }
             val rule = p.recurrence
             val start = fields.startAt
             if (rule != null && start != null) {
                 // Tekrar eden iş: şablon + ilk tekrarlar; "Geri al" bütün seriyi kaldırır.
                 val seriesId = repo.addSeries(fields, rule, start, tz)
-                val summary = listOfNotNull("↻ " + rule.label(), "ilk: $whenText", categoryName ?: "Gelen kutusu").joinToString(" · ")
+                val summary = listOfNotNull("↻ " + rule.label(), "ilk: $whenText", amountText, categoryName ?: "Gelen kutusu").joinToString(" · ")
                 notify("Eklendi · $summary") { repo.stopSeries(seriesId, Long.MIN_VALUE) }
             } else {
                 val id = repo.addItem(fields)
-                val summary = listOfNotNull(whenText, categoryName ?: "Gelen kutusu").joinToString(" · ")
+                val summary = listOfNotNull(whenText, amountText, categoryName ?: "Gelen kutusu").joinToString(" · ")
                 notify("Eklendi · $summary") { repo.deleteItem(id) }
             }
         }
@@ -425,6 +434,11 @@ private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit) {
             }
 
             @Composable
+            fun Expenses(m: Modifier) {
+                ExpensesPane(items, categories, today, onOpen = { editingItemId = it.id }, modifier = m)
+            }
+
+            @Composable
             fun Plan(m: Modifier) {
                 PlanPane(
                     items = items,
@@ -445,10 +459,15 @@ private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit) {
                 Row(Modifier.padding(padding).fillMaxSize()) {
                     Column(Modifier.width(340.dp).fillMaxHeight()) {
                         LeftPaneSwitcher(
-                            showInbox = leftTab == Tab.Inbox,
-                            onSelect = { leftTab = if (it) Tab.Inbox else Tab.Categories },
+                            labels = LeftTabs.map { it.label },
+                            selected = LeftTabs.indexOf(leftTab).coerceAtLeast(0),
+                            onSelect = { leftTab = LeftTabs[it] },
                         )
-                        if (leftTab == Tab.Inbox) Inbox(Modifier.fillMaxSize()) else CategoriesArea(Modifier.fillMaxSize())
+                        when (leftTab) {
+                            Tab.Categories -> CategoriesArea(Modifier.fillMaxSize())
+                            Tab.Expenses -> Expenses(Modifier.fillMaxSize())
+                            else -> Inbox(Modifier.fillMaxSize())
+                        }
                     }
                     VerticalDivider()
                     Plan(Modifier.fillMaxSize())
@@ -459,6 +478,7 @@ private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit) {
                     Tab.Plan -> Plan(m)
                     Tab.Inbox -> Inbox(m)
                     Tab.Categories -> CategoriesArea(m)
+                    Tab.Expenses -> Expenses(m)
                 }
             }
         }

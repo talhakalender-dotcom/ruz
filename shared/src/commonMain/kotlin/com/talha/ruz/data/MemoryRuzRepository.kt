@@ -61,6 +61,7 @@ class MemoryRuzRepository(
             reminderMinBefore = fields.reminderMinBefore,
             order = top,
             createdAt = nowMillis(),
+            amountKurus = fields.amountKurus,
         )
         its.update { it + It(item) }
         return id
@@ -80,6 +81,7 @@ class MemoryRuzRepository(
                 allDay = fields.allDay,
                 isMilestone = fields.isMilestone,
                 reminderMinBefore = fields.reminderMinBefore,
+                amountKurus = fields.amountKurus,
             ),
         )
     }
@@ -170,6 +172,7 @@ class MemoryRuzRepository(
             isMilestone = template.isMilestone,
             reminderMinBefore = template.reminderMinBefore,
             generatedUntil = initialGeneratedUntil(first.date),
+            amountKurus = template.amountKurus,
         )
         seriesState.update { it + s }
         generate(s, first.date, timeZone)
@@ -202,6 +205,7 @@ class MemoryRuzRepository(
                     order = order,
                     createdAt = nowMillis(),
                     seriesId = s.id,
+                    amountKurus = s.amountKurus,
                 ),
             )
         }

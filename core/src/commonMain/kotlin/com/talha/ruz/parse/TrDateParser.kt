@@ -15,7 +15,7 @@ import com.talha.ruz.recur.Recurrence
 import kotlin.time.Duration.Companion.minutes
 
 /** Yakalama kutusunda anlaşılan parçaların türleri. Önizlemede her biri bir etiket olur. */
-enum class ChipKind { Date, Time, Duration, Category, Milestone, Repeat }
+enum class ChipKind { Date, Time, Duration, Category, Milestone, Repeat, Amount }
 
 /** Yakalama kutusuna yazılan cümlenin kurallarla ayrıştırılmış hâli. */
 data class ParsedCapture(
@@ -34,6 +34,8 @@ data class ParsedCapture(
     val categoryIsNew: Boolean = false,
     /** "her ayın 15'i", "her pazartesi" gibi tekrar; [date] ilk tekrarın günüdür. */
     val recurrence: Recurrence? = null,
+    /** "350 TL", "₺120,50", "2 bin TL" gibi tutar (kuruş). */
+    val amountKurus: Long? = null,
 ) {
     /** Gün belli ama saat yok: Gantt'ta tam gün çubuğu. */
     val allDay: Boolean get() = date != null && time == null
@@ -45,6 +47,7 @@ data class ParsedCapture(
             if (categoryName != null) add(ChipKind.Category)
             if (isMilestone) add(ChipKind.Milestone)
             if (recurrence != null) add(ChipKind.Repeat)
+            if (amountKurus != null) add(ChipKind.Amount)
         }
 }
 
@@ -59,6 +62,7 @@ data class ParsedCapture(
  * - Göreli: 2 gün sonra, 3 saat sonra, yarım saat sonra, bir hafta sonra
  * - Kategori: #iş, #alış (Alışveriş'e uyar), #kitaplar (yoksa yeni kategori)
  * - Son tarih: son gün, son tarih, son ödeme, en geç
+ * - Tutar: 350 TL, 1.250,50 TL, ₺120, 2 bin TL, 80 lira
  * - Tekrar: her gün, her sabah, hafta içi, her pazartesi ve perşembe, her hafta cuma, iki haftada bir,
  *   her ayın 15'i, her ayın son günü, 3 ayda bir, her yıl 15 aralık
  *
@@ -101,10 +105,13 @@ object TrDateParser {
         var categoryName: String? = null
         var categoryIsNew = false
         var recurrence: Recurrence? = null
+        var amount: Long? = null
 
         fun execute(): ParsedCapture {
             if (ChipKind.Category !in ignore) category()
             if (ChipKind.Repeat !in ignore) repeats()
+            // Tutar tarih/saatten önce: "12.50 TL" saat, "1.250 TL" tarih sanılmasın.
+            if (ChipKind.Amount !in ignore) amounts()
             if (ChipKind.Time !in ignore) {
                 timeRanges()
                 relativeOffsets(timeUnits = true)
@@ -146,6 +153,7 @@ object TrDateParser {
                 categoryName = categoryName,
                 categoryIsNew = categoryIsNew,
                 recurrence = recurrence,
+                amountKurus = amount,
             )
         }
 
@@ -477,6 +485,32 @@ object TrDateParser {
             scan(Regex("${B}her(?=\\s+(?:sabah|öğle|öğlen|akşam|gece)$E)")) {
                 if (recurrence != null) return@scan false
                 recurrence = Recurrence(Freq.Daily)
+                true
+            }
+        }
+
+        fun amounts() {
+            val num = "(\\d{1,3}(?:\\.\\d{3})+|\\d+)(?:[.,](\\d{1,2}))?"
+            fun kurus(whole: String, frac: String): Long? {
+                val lira = whole.replace(".", "").toLongOrNull() ?: return null
+                return lira * 100 + (if (frac.isEmpty()) 0L else frac.padEnd(2, '0').toLong())
+            }
+            // 2 bin TL
+            scan(Regex("$B(\\d+)\\s*bin\\s*(?:tl|₺|lira)(?:['’]?\\p{L}*)?$E")) { m ->
+                if (amount != null) return@scan false
+                amount = (m.groupValues[1].toLongOrNull() ?: return@scan false) * 100_000
+                true
+            }
+            // 350 TL, 1.250,50 TL, 80 lira, 350tl'lik
+            scan(Regex("$B$num\\s*(?:tl|₺|lira)(?:['’]?\\p{L}*)?$E")) { m ->
+                if (amount != null) return@scan false
+                amount = kurus(m.groupValues[1], m.groupValues[2]) ?: return@scan false
+                true
+            }
+            // ₺350
+            scan(Regex("₺\\s*$num$E")) { m ->
+                if (amount != null) return@scan false
+                amount = kurus(m.groupValues[1], m.groupValues[2]) ?: return@scan false
                 true
             }
         }

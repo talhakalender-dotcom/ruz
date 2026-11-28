@@ -26,6 +26,7 @@ data class RuzSeries(
     val reminderMinBefore: Int?,
     /** Bu güne kadar (dahil) tekrarlar üretildi. */
     val generatedUntil: LocalDate,
+    val amountKurus: Long? = null,
 )
 
 /** Tekrarların önceden ne kadar ileriye üretileceği. */

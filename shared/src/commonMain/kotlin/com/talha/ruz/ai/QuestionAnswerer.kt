@@ -1,6 +1,7 @@
 package com.talha.ruz.ai
 
 import com.talha.ruz.ask.QuestionScope
+import com.talha.ruz.money.Money
 import com.talha.ruz.data.RuzCategory
 import com.talha.ruz.data.RuzItem
 import com.talha.ruz.ui.epochToLocal
@@ -60,6 +61,7 @@ object QuestionAnswerer {
                 append("- ").append(i.text).append(" (").append(names[i.categoryId] ?: "Gelen kutusu").append(")")
                 i.startAt?.let { append(" — ").append(dateText(i, it)) }
                 if (i.isMilestone) append(" [son tarih]")
+                i.amountKurus?.let { append(" [tutar: ").append(Money.format(it)).append("]") }
             }
         }
         val d = now.date

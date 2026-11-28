@@ -111,7 +111,26 @@ class TrDateParserTest {
         val r = p("süt 12.50 tl")
         assertNull(r.time)
         assertNull(r.date)
-        assertEquals("süt 12.50 tl", r.title)
+        assertEquals(1250L, r.amountKurus)
+        assertEquals("süt", r.title)
+        // Para birimi yoksa tutar sayılmaz, saat de sayılmaz.
+        val n = p("süt 12.50")
+        assertNull(n.time)
+        assertNull(n.amountKurus)
+    }
+
+    @Test fun amounts() {
+        val r = p("market 350 TL #alışveriş")
+        assertEquals(35_000L, r.amountKurus)
+        assertEquals("market", r.title)
+        assertEquals("Alışveriş", r.categoryName)
+        assertEquals(1_500_000L, p("kira 15.000 TL her ayın 15'i").amountKurus)
+        assertEquals(12_050L, p("₺120,50 kahve").amountKurus)
+        assertEquals(200_000L, p("2 bin TL avans").amountKurus)
+        assertEquals(8_000L, p("taksi 80 lira").amountKurus)
+        assertEquals(125_050L, p("fatura 1.250,50 TL").amountKurus)
+        assertEquals(35_000L, p("350tl'lik ayakkabı").amountKurus)
+        assertNull(p("3 elma al").amountKurus)
     }
 
     @Test fun deadlineDayOfMonth() {
