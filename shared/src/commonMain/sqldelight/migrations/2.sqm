@@ -1,0 +1,18 @@
+-- Sürüm 2 → 3: tekrar eden işler. Her tekrar ayrı bir öğedir; series_id ile seriye bağlanır.
+ALTER TABLE item ADD COLUMN series_id TEXT;
+
+CREATE TABLE series (
+    id TEXT NOT NULL PRIMARY KEY,
+    rule TEXT NOT NULL,
+    text TEXT NOT NULL,
+    category_id TEXT,
+    anchor_day TEXT NOT NULL,
+    time_min INTEGER,
+    duration_min INTEGER,
+    is_milestone INTEGER NOT NULL DEFAULT 0,
+    reminder_min_before INTEGER,
+    generated_until TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    deleted_at INTEGER
+);

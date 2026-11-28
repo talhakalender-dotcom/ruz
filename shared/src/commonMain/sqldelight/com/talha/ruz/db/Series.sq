@@ -1,0 +1,33 @@
+-- Tekrar eden iş şablonu: "her ayın 15'i kira". Tekrarlar item tablosunda ayrı öğeler olarak üretilir.
+-- anchor_day: ilk tekrarın günü (ISO), generated_until: o güne kadar (dahil) öğeler üretildi.
+-- time_min: günün dakikası (null = tam gün).
+CREATE TABLE series (
+    id TEXT NOT NULL PRIMARY KEY,
+    rule TEXT NOT NULL,
+    text TEXT NOT NULL,
+    category_id TEXT,
+    anchor_day TEXT NOT NULL,
+    time_min INTEGER,
+    duration_min INTEGER,
+    is_milestone INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    reminder_min_before INTEGER,
+    generated_until TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    deleted_at INTEGER
+);
+
+selectActive:
+SELECT * FROM series WHERE deleted_at IS NULL;
+
+insert:
+INSERT INTO series(id, rule, text, category_id, anchor_day, time_min, duration_min, is_milestone,
+                   reminder_min_before, generated_until, created_at, updated_at, deleted_at)
+VALUES (:id, :rule, :text, :categoryId, :anchorDay, :timeMin, :durationMin, :isMilestone,
+        :reminderMinBefore, :generatedUntil, :now, :now, NULL);
+
+setGeneratedUntil:
+UPDATE series SET generated_until = :generatedUntil, updated_at = :now WHERE id = :id;
+
+softDelete:
+UPDATE series SET deleted_at = :now, updated_at = :now WHERE id = :id;

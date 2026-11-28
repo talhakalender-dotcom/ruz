@@ -10,10 +10,12 @@ import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
+import com.talha.ruz.recur.Freq
+import com.talha.ruz.recur.Recurrence
 import kotlin.time.Duration.Companion.minutes
 
 /** Yakalama kutusunda anlaşılan parçaların türleri. Önizlemede her biri bir etiket olur. */
-enum class ChipKind { Date, Time, Duration, Category, Milestone }
+enum class ChipKind { Date, Time, Duration, Category, Milestone, Repeat }
 
 /** Yakalama kutusuna yazılan cümlenin kurallarla ayrıştırılmış hâli. */
 data class ParsedCapture(
@@ -30,6 +32,8 @@ data class ParsedCapture(
     val categoryName: String? = null,
     /** #etiket var olan bir kategoriye uymadı; bu adla yeni kategori açılacak. */
     val categoryIsNew: Boolean = false,
+    /** "her ayın 15'i", "her pazartesi" gibi tekrar; [date] ilk tekrarın günüdür. */
+    val recurrence: Recurrence? = null,
 ) {
     /** Gün belli ama saat yok: Gantt'ta tam gün çubuğu. */
     val allDay: Boolean get() = date != null && time == null
@@ -40,6 +44,7 @@ data class ParsedCapture(
             if (durationMin != null) add(ChipKind.Duration)
             if (categoryName != null) add(ChipKind.Category)
             if (isMilestone) add(ChipKind.Milestone)
+            if (recurrence != null) add(ChipKind.Repeat)
         }
 }
 
@@ -54,6 +59,8 @@ data class ParsedCapture(
  * - Göreli: 2 gün sonra, 3 saat sonra, yarım saat sonra, bir hafta sonra
  * - Kategori: #iş, #alış (Alışveriş'e uyar), #kitaplar (yoksa yeni kategori)
  * - Son tarih: son gün, son tarih, son ödeme, en geç
+ * - Tekrar: her gün, her sabah, hafta içi, her pazartesi ve perşembe, her hafta cuma, iki haftada bir,
+ *   her ayın 15'i, her ayın son günü, 3 ayda bir, her yıl 15 aralık
  *
  * [ignore]: kullanıcının önizlemede kaldırdığı etiketler; o tür kelimeler başlıkta kalır.
  */
@@ -93,9 +100,11 @@ object TrDateParser {
         var milestone = false
         var categoryName: String? = null
         var categoryIsNew = false
+        var recurrence: Recurrence? = null
 
         fun execute(): ParsedCapture {
             if (ChipKind.Category !in ignore) category()
+            if (ChipKind.Repeat !in ignore) repeats()
             if (ChipKind.Time !in ignore) {
                 timeRanges()
                 relativeOffsets(timeUnits = true)
@@ -124,6 +133,7 @@ object TrDateParser {
             if (time != null && date == null) {
                 date = if (time!! >= now.time) today else today.plus(1, DateTimeUnit.DAY)
             }
+            recurrence?.let { finishRecurrence(it) }
             if (ChipKind.Milestone !in ignore && date != null) milestone()
 
             return ParsedCapture(
@@ -135,6 +145,7 @@ object TrDateParser {
                 isMilestone = milestone,
                 categoryName = categoryName,
                 categoryIsNew = categoryIsNew,
+                recurrence = recurrence,
             )
         }
 
@@ -417,6 +428,81 @@ object TrDateParser {
                 milestone = true
                 true
             }
+        }
+
+        /** Tekrar ifadeleri. Gün/ay ayrıntısı eksikse [finishRecurrence] tarih kurallarının sonucundan tamamlar. */
+        fun repeats() {
+            val possessive = "(?:i|ı|u|ü|si|sı|inde|ında|unde|ünde|sinde|sında|ine|ına|une|üne)"
+            val wd = "(?:pazartesi|salı|çarşamba|perşembe|cumartesi|cuma|pazar)"
+            // her ayın 15'i, her ay 15'inde
+            scan(Regex("${B}her\\s+ay(?:ın)?\\s+(\\d{1,2})(?:['’]?$possessive)?$E")) { m ->
+                val day = m.groupValues[1].toInt()
+                if (day !in 1..31) return@scan false
+                recurrence = Recurrence(Freq.Monthly, monthDay = day)
+                true
+            }
+            // her ayın son günü, her ay sonu
+            scan(Regex("${B}her\\s+(?:ayın\\s+son\\s+günü|ay\\s*sonu(?:nda)?)$E")) {
+                recurrence = Recurrence(Freq.Monthly, monthDay = -1)
+                true
+            }
+            // hafta içi (her gün)
+            scan(Regex("${B}(?:her\\s+)?hafta\\s+içi(?:\\s+her\\s+gün)?$E")) {
+                if (recurrence != null) return@scan false
+                recurrence = Recurrence(Freq.Weekly, weekdays = setOf(1, 2, 3, 4, 5))
+                true
+            }
+            // her pazartesi ve perşembe
+            scan(Regex("${B}her\\s+($wd(?:\\s*(?:,|ve)\\s*$wd)*)(?:\\s+günü|\\s+günleri)?$E")) { m ->
+                if (recurrence != null) return@scan false
+                val days = Regex(wd).findAll(m.groupValues[1]).map { WEEKDAYS.indexOf(it.value) + 1 }.filter { it > 0 }.toSet()
+                if (days.isEmpty()) return@scan false
+                recurrence = Recurrence(Freq.Weekly, weekdays = days)
+                true
+            }
+            // iki haftada bir, 3 günde bir, 2 ayda bir
+            scan(Regex("$B($NUM)\\s*(gün|hafta|ay|yıl|sene)(?:de|da|te|ta)\\s+bir$E")) { m ->
+                if (recurrence != null) return@scan false
+                val n = parseNumber(m.groupValues[1])?.toInt()?.takeIf { it >= 1 } ?: return@scan false
+                recurrence = Recurrence(freqOf(m.groupValues[2]), interval = n)
+                true
+            }
+            // her gün, her hafta, her ay, her yıl
+            scan(Regex("${B}her\\s*(gün|hafta|ay|yıl|sene)$E")) { m ->
+                if (recurrence != null) return@scan false
+                recurrence = Recurrence(freqOf(m.groupValues[1]))
+                true
+            }
+            // her sabah / her akşam: günlük; saat kelimesi saat kuralına kalır
+            scan(Regex("${B}her(?=\\s+(?:sabah|öğle|öğlen|akşam|gece)$E)")) {
+                if (recurrence != null) return@scan false
+                recurrence = Recurrence(Freq.Daily)
+                true
+            }
+        }
+
+        fun freqOf(word: String): Freq = when (word) {
+            "gün" -> Freq.Daily
+            "hafta" -> Freq.Weekly
+            "ay" -> Freq.Monthly
+            else -> Freq.Yearly
+        }
+
+        /** Eksik gün/ay bilgisini tamamlar ve ilk tekrarın gününü bulur (saat geçtiyse bir sonraki). */
+        fun finishRecurrence(rule: Recurrence) {
+            val ref = date ?: today
+            val filled = when (rule.freq) {
+                Freq.Weekly -> if (rule.weekdays.isEmpty()) rule.copy(weekdays = setOf(ref.dayOfWeek.isoDayNumber)) else rule
+                Freq.Monthly -> if (rule.monthDay == null) rule.copy(monthDay = ref.day) else rule
+                Freq.Yearly -> rule.copy(month = rule.month ?: (ref.month.ordinal + 1), monthDay = rule.monthDay ?: ref.day)
+                Freq.Daily -> rule
+            }
+            val anchorFrom = if (rule.freq == Freq.Daily && date != null) date!! else today
+            val candidates = filled.occurrences(anchorFrom, today, today.plus(800, DateTimeUnit.DAY))
+            val t = time
+            val first = candidates.firstOrNull { d -> !(d == today && t != null && t < now.time) } ?: candidates.firstOrNull()
+            recurrence = filled
+            if (first != null) date = first
         }
 
         // ---- tarih hesapları ----

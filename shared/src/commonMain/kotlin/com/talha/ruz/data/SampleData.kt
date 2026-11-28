@@ -1,5 +1,7 @@
 package com.talha.ruz.data
 
+import com.talha.ruz.recur.Freq
+import com.talha.ruz.recur.Recurrence
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -69,5 +71,18 @@ fun sampleRepository(today: LocalDate, timeZone: TimeZone): MemoryRuzRepository 
     // Örnek zincir: kalıp kontrolü bitince beton dökümü başlar.
     val kalip = items.first { it.text.startsWith("Kalıp") }.id
     val beton = items.first { it.text == "Beton dökümü" }.id
-    return MemoryRuzRepository(cats, items, listOf(RuzLink("l0", kalip, beton)))
+    // Örnek tekrar eden işler; tekrarları açılışta extendSeries üretir.
+    val series = listOf(
+        RuzSeries(
+            id = "r0", rule = Recurrence(Freq.Monthly, monthDay = 15), text = "Kira", categoryId = cat("Ödemeler"),
+            anchorDay = today, timeMin = null, durationMin = 1440, isMilestone = true, reminderMinBefore = null,
+            generatedUntil = initialGeneratedUntil(today),
+        ),
+        RuzSeries(
+            id = "r1", rule = Recurrence(Freq.Weekly, weekdays = setOf(1)), text = "Şantiye koordinasyon toplantısı",
+            categoryId = cat("İş"), anchorDay = today, timeMin = 10 * 60, durationMin = 60, isMilestone = false,
+            reminderMinBefore = null, generatedUntil = initialGeneratedUntil(today),
+        ),
+    )
+    return MemoryRuzRepository(cats, items, listOf(RuzLink("l0", kalip, beton)), series)
 }

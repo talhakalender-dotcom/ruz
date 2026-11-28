@@ -81,6 +81,8 @@ fun ItemEditSheet(
     successors: List<Pair<RuzLink, RuzItem>> = emptyList(),
     onRemoveLink: (RuzLink) -> Unit = {},
     remindersSupported: Boolean = false,
+    seriesLabel: String? = null,
+    onStopSeries: () -> Unit = {},
 ) {
     val start = remember(item.id) { item.startAt?.let(::epochToLocal) }
     var text by remember(item.id) { mutableStateOf(item.text) }
@@ -201,6 +203,18 @@ fun ItemEditSheet(
                             (time == null && value == null && reminder != ReminderDefaults.OFF)
                         FilterChip(selected = selected, onClick = { reminder = value }, label = { Text(label) })
                     }
+                }
+            }
+
+            if (item.seriesId != null) {
+                SectionLabel("Tekrar")
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "↻ " + (seriesLabel ?: "Tekrar eden iş") + "\nDeğişiklikler yalnızca bu tekrara uygulanır.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = onStopSeries) { Text("Tekrarı durdur") }
                 }
             }
 

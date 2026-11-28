@@ -17,7 +17,8 @@ CREATE TABLE item (
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     deleted_at INTEGER,
-    all_day INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0
+    all_day INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0,
+    series_id TEXT
 );
 
 CREATE INDEX item_category ON item(category_id);
@@ -31,9 +32,9 @@ SELECT coalesce(min(sort_order), 0.0) FROM item WHERE deleted_at IS NULL;
 
 insert:
 INSERT INTO item(id, text, note, category_id, done, done_at, start_at, duration_min, is_milestone,
-                 reminder_min_before, sort_order, created_at, updated_at, deleted_at, all_day)
+                 reminder_min_before, sort_order, created_at, updated_at, deleted_at, all_day, series_id)
 VALUES (:id, :text, '', :categoryId, 0, NULL, :startAt, :durationMin, :isMilestone,
-        :reminderMinBefore, :sortOrder, :now, :now, NULL, :allDay);
+        :reminderMinBefore, :sortOrder, :now, :now, NULL, :allDay, :seriesId);
 
 update:
 UPDATE item SET text = :text, category_id = :categoryId, start_at = :startAt, duration_min = :durationMin,
@@ -60,3 +61,8 @@ UPDATE item SET deleted_at = NULL, updated_at = :now WHERE id = :id;
 
 setSchedule:
 UPDATE item SET start_at = :startAt, duration_min = :durationMin, all_day = :allDay, updated_at = :now WHERE id = :id;
+
+-- Seriyi durdururken: bitmemiş, [fromMs] ve sonrasındaki tekrarlar silinir.
+softDeleteFutureInSeries:
+UPDATE item SET deleted_at = :now, updated_at = :now
+WHERE series_id = :seriesId AND done = 0 AND deleted_at IS NULL AND start_at >= :fromMs;

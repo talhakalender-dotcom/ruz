@@ -4,6 +4,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import com.talha.ruz.recur.Recurrence
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 /**
  * Bellekte duran veri. Tarayıcı deneme sürümü kullanır: sayfa yenilenince başa (örnek verilere) döner.
@@ -13,6 +17,7 @@ class MemoryRuzRepository(
     initialCategories: List<RuzCategory> = emptyList(),
     initialItems: List<RuzItem> = emptyList(),
     initialLinks: List<RuzLink> = emptyList(),
+    initialSeries: List<RuzSeries> = emptyList(),
 ) : RuzRepository {
     private data class Cat(val c: RuzCategory, val deleted: Boolean = false)
     private data class It(val i: RuzItem, val deleted: Boolean = false)
@@ -28,6 +33,9 @@ class MemoryRuzRepository(
 
     private val linkState = MutableStateFlow(initialLinks)
     override val links: Flow<List<RuzLink>> = linkState
+
+    private val seriesState = MutableStateFlow(initialSeries)
+    override val series: Flow<List<RuzSeries>> = seriesState
 
     override suspend fun seedIfEmpty() {
         if (cats.value.isNotEmpty()) return
@@ -146,6 +154,69 @@ class MemoryRuzRepository(
 
     override suspend fun deleteLink(id: String) {
         linkState.update { list -> list.filterNot { it.id == id } }
+    }
+
+    override suspend fun addSeries(template: ItemFields, rule: Recurrence, firstStart: Long, timeZone: TimeZone): String {
+        val id = newId()
+        val first = kotlin.time.Instant.fromEpochMilliseconds(firstStart).toLocalDateTime(timeZone)
+        val s = RuzSeries(
+            id = id,
+            rule = rule,
+            text = template.text.trim(),
+            categoryId = template.categoryId,
+            anchorDay = first.date,
+            timeMin = if (template.allDay) null else first.hour * 60 + first.minute,
+            durationMin = template.durationMin,
+            isMilestone = template.isMilestone,
+            reminderMinBefore = template.reminderMinBefore,
+            generatedUntil = initialGeneratedUntil(first.date),
+        )
+        seriesState.update { it + s }
+        generate(s, first.date, timeZone)
+        return id
+    }
+
+    override suspend fun extendSeries(today: LocalDate, timeZone: TimeZone) {
+        seriesState.value.forEach { generate(it, today, timeZone) }
+    }
+
+    private fun generate(s: RuzSeries, today: LocalDate, timeZone: TimeZone) {
+        val (starts, until) = s.pendingStarts(today, timeZone)
+        if (until == s.generatedUntil) return
+        var order = (its.value.filter { !it.deleted }.minOfOrNull { it.i.order } ?: 0.0)
+        val created = starts.map { start ->
+            order -= 1.0
+            It(
+                RuzItem(
+                    id = newId(),
+                    text = s.text,
+                    note = "",
+                    categoryId = s.categoryId,
+                    done = false,
+                    doneAt = null,
+                    startAt = start,
+                    durationMin = s.durationMin ?: if (s.timeMin == null) 1440 else 60,
+                    allDay = s.timeMin == null,
+                    isMilestone = s.isMilestone,
+                    reminderMinBefore = s.reminderMinBefore,
+                    order = order,
+                    createdAt = nowMillis(),
+                    seriesId = s.id,
+                ),
+            )
+        }
+        its.update { it + created }
+        seriesState.update { list -> list.map { if (it.id == s.id) it.copy(generatedUntil = until) else it } }
+    }
+
+    override suspend fun stopSeries(seriesId: String, fromMs: Long) {
+        its.update { list ->
+            list.map { e ->
+                val i = e.i
+                if (i.seriesId == seriesId && !i.done && !e.deleted && (i.startAt ?: Long.MIN_VALUE) >= fromMs) e.copy(deleted = true) else e
+            }
+        }
+        seriesState.update { list -> list.filterNot { it.id == seriesId } }
     }
 
     override suspend fun restoreCategory(id: String, itemIds: List<String>) {

@@ -97,7 +97,14 @@ private sealed interface GanttRow {
         override val height: Float,
     ) : GanttRow
 
-    data class Task(val item: RuzItem, val color: Long?, override val top: Float, override val height: Float) : GanttRow
+    /** Bir satır: tek iş ya da bir serinin bütün tekrarları. [item] satırın adı için sıradaki tekrar. */
+    data class Task(
+        val items: List<RuzItem>,
+        val item: RuzItem,
+        val color: Long?,
+        override val top: Float,
+        override val height: Float,
+    ) : GanttRow
 }
 
 private sealed interface Hit {
@@ -193,12 +200,18 @@ fun GanttChart(
         val rows = buildList {
             var y = 0f
             groups.forEach { (key, cat, tasks) ->
+                // Bir serinin tekrarları tek satırda; satırın adı sıradaki (bitmemiş, gelecekteki) tekrardan.
+                val units = tasks.groupBy { it.seriesId ?: it.id }.values.map { list ->
+                    val sorted = list.sortedBy { it.startAt }
+                    val next = sorted.firstOrNull { !it.done && it.span().endMs >= nowMs } ?: sorted.last()
+                    sorted to next
+                }.sortedWith(compareBy({ it.second.startAt }, { it.second.order }))
                 val isCollapsed = key in collapsed
-                add(GanttRow.Group(key, cat?.name ?: "Gelen kutusu", cat?.color, tasks.size, isCollapsed, y, groupH))
+                add(GanttRow.Group(key, cat?.name ?: "Gelen kutusu", cat?.color, units.size, isCollapsed, y, groupH))
                 y += groupH
                 if (!isCollapsed) {
-                    tasks.sortedWith(compareBy({ it.startAt }, { it.order })).forEach { t ->
-                        add(GanttRow.Task(t, cat?.color, y, rowH))
+                    units.forEach { (list, next) ->
+                        add(GanttRow.Task(list, next, cat?.color, y, rowH))
                         y += rowH
                     }
                 }
@@ -219,6 +232,14 @@ fun GanttChart(
             }
         }
 
+        /** Satırda bu x'teki çubuk (seride birden çok olabilir); önce tam içine düşen, yoksa en yakın. */
+        fun barAt(row: GanttRow.Task, x: Float, tol: Float, exceptId: String? = null): Pair<RuzItem, Pair<Float, Float>>? {
+            val candidates = row.items.filter { it.id != exceptId }.map { it to barRect(it, it.span()) }
+                .filter { (_, r) -> x >= r.first - tol && x <= r.second + tol + handleW }
+            return candidates.firstOrNull { (_, r) -> x >= r.first && x <= r.second }
+                ?: candidates.minByOrNull { (_, r) -> min(abs(x - r.first), abs(x - r.second)) }
+        }
+
         fun hitTest(p: Offset): Hit? {
             if (p.y < headerH) return null
             val y = p.y - headerH + scrollY
@@ -227,14 +248,13 @@ fun GanttChart(
                 is GanttRow.Group -> Hit.Toggle(row.key)
                 is GanttRow.Task -> {
                     if (p.x < labelW) return Hit.Open(row.item)
-                    val (x0, x1) = barRect(row.item, row.item.span())
-                    val tol = px(6f)
+                    val (item, rect) = barAt(row, p.x, px(6f)) ?: return null
+                    val (x0, x1) = rect
                     when {
-                        p.x < x0 - tol || p.x > x1 + handleW -> null
-                        row.item.isMilestone -> Hit.Bar(row.item, DragHandle.Move)
-                        p.x > x1 - handleW / 2f -> Hit.Bar(row.item, DragHandle.End)
-                        x1 - x0 >= handleW * 3 && p.x < x0 + handleW / 2f -> Hit.Bar(row.item, DragHandle.Start)
-                        p.x <= x1 -> Hit.Bar(row.item, DragHandle.Move)
+                        item.isMilestone -> Hit.Bar(item, DragHandle.Move)
+                        p.x > x1 - handleW / 2f -> Hit.Bar(item, DragHandle.End)
+                        x1 - x0 >= handleW * 3 && p.x < x0 + handleW / 2f -> Hit.Bar(item, DragHandle.Start)
+                        p.x <= x1 -> Hit.Bar(item, DragHandle.Move)
                         else -> null
                     }
                 }
@@ -246,10 +266,8 @@ fun GanttChart(
             if (p.y < headerH || p.x < labelW) return null
             val y = p.y - headerH + scrollY
             val row = rows.firstOrNull { y >= it.top && y < it.top + it.height } as? GanttRow.Task ?: return null
-            if (row.item.id == exceptId) return null
-            val (x0, x1) = barRect(row.item, row.item.span())
-            val tol = px(8f)
-            return if (p.x >= x0 - tol && p.x <= x1 + tol) row.item else null
+            val (item, rect) = barAt(row, p.x, px(8f), exceptId) ?: return null
+            return if (p.x <= rect.second + px(8f)) item else null
         }
 
         val minCell = px(14f)
@@ -423,13 +441,13 @@ fun GanttChart(
             // ---- satırlar ----
             clipRect(left = 0f, top = headerH) {
                 // Bağ okları: öncülün bitişinden ardılın başına.
-                val taskRows = rows.filterIsInstance<GanttRow.Task>().associateBy { it.item.id }
+                val taskRows = rows.filterIsInstance<GanttRow.Task>().flatMap { r -> r.items.map { it.id to (r to it) } }.toMap()
                 clipRect(left = labelW) {
                     links.forEach { l ->
-                        val pr = taskRows[l.predecessorId] ?: return@forEach
-                        val sr = taskRows[l.successorId] ?: return@forEach
-                        val px1 = barRect(pr.item, spanFor(pr.item)).second
-                        val sx0 = barRect(sr.item, spanFor(sr.item)).first
+                        val (pr, pItem) = taskRows[l.predecessorId] ?: return@forEach
+                        val (sr, sItem) = taskRows[l.successorId] ?: return@forEach
+                        val px1 = barRect(pItem, spanFor(pItem)).second
+                        val sx0 = barRect(sItem, spanFor(sItem)).first
                         val yP = headerH + pr.top - scrollY + pr.height / 2f
                         val yS = headerH + sr.top - scrollY + sr.height / 2f
                         drawLinkArrow(ctx, px1, yP, sx0, yS, barH, colors.onSurfaceVariant.copy(alpha = 0.8f))
@@ -444,11 +462,13 @@ fun GanttChart(
                             topLeft = Offset(0f, top),
                             size = Size(size.width, row.height),
                         )
-                        is GanttRow.Task -> {
-                            val preview = drag?.takeIf { it.itemId == row.item.id }
-                            val (x0, x1) = barRect(row.item, spanFor(row.item))
+                        is GanttRow.Task -> row.items.forEach { item ->
+                            val preview = drag?.takeIf { it.itemId == item.id }
+                            val (x0, x1) = barRect(item, spanFor(item))
+                            // Ekranın çok dışındaki tekrarlar çizilmez.
+                            if (x1 < labelW - px(240f) || x0 > size.width + px(40f)) return@forEach
                             clipRect(left = labelW) {
-                                if (row.item.id == highlightId) {
+                                if (item.id == highlightId) {
                                     val pad = px(4f)
                                     drawRoundRect(
                                         colors.secondary,
@@ -458,7 +478,7 @@ fun GanttChart(
                                         style = Stroke(width = px(3f)),
                                     )
                                 }
-                                drawBar(ctx, row, x0, x1, top, barH, preview != null, colors.outline)
+                                drawBar(ctx, row, item, x0, x1, top, barH, preview != null, colors.outline)
                             }
                         }
                     }
@@ -497,10 +517,11 @@ fun GanttChart(
 
             // ---- sürüklerken zaman balonu ----
             drag?.let { d ->
-                val row = rows.firstOrNull { it is GanttRow.Task && it.item.id == d.itemId } as? GanttRow.Task
-                if (row != null) {
+                val row = rows.firstOrNull { it is GanttRow.Task && it.items.any { i -> i.id == d.itemId } } as? GanttRow.Task
+                val dragged = row?.items?.firstOrNull { it.id == d.itemId }
+                if (row != null && dragged != null) {
                     drawDragTooltip(
-                        ctx, row, d.span, headerH + row.top - scrollY, colors.inverseSurface, colors.inverseOnSurface,
+                        ctx, row, dragged, d.span, headerH + row.top - scrollY, colors.inverseSurface, colors.inverseOnSurface,
                         override = d.linkTarget?.let { "→ " + it.text + " bitince başlar" },
                     )
                 }
@@ -647,6 +668,7 @@ private fun DrawScope.drawHeader(ctx: DrawCtx, minLabelPx: Float, accent: Color)
 private fun DrawScope.drawBar(
     ctx: DrawCtx,
     row: GanttRow.Task,
+    item: RuzItem,
     x0: Float,
     x1: Float,
     rowTop: Float,
@@ -654,7 +676,6 @@ private fun DrawScope.drawBar(
     dragging: Boolean,
     fallback: Color,
 ) {
-    val item = row.item
     val base = row.color?.let { Color(it.toInt()) } ?: fallback
     val color = if (item.done) base.copy(alpha = 0.35f) else base
     val top = rowTop + (row.height - barH) / 2f
@@ -745,7 +766,8 @@ private fun DrawScope.drawLabel(ctx: DrawCtx, row: GanttRow, top: Float, pad: Fl
                 color = if (row.item.done) ctx.muted else ctx.text,
                 textDecoration = if (row.item.done) TextDecoration.LineThrough else null,
             )
-            val l = ctx.measure(row.item.text, style, ctx.labelW - pad * 2 - ctx.px(8f))
+            val name = (if (row.item.seriesId != null) "↻ " else "") + row.item.text
+            val l = ctx.measure(name, style, ctx.labelW - pad * 2 - ctx.px(8f))
             drawText(l, topLeft = Offset(pad + ctx.px(8f), top + (row.height - l.size.height) / 2f))
         }
     }
@@ -754,6 +776,7 @@ private fun DrawScope.drawLabel(ctx: DrawCtx, row: GanttRow, top: Float, pad: Fl
 private fun DrawScope.drawDragTooltip(
     ctx: DrawCtx,
     row: GanttRow.Task,
+    item: RuzItem,
     span: Span,
     rowTop: Float,
     bg: Color,
@@ -764,7 +787,7 @@ private fun DrawScope.drawDragTooltip(
     val end = epochToLocal(span.endMs)
     val label = if (override != null) {
         override
-    } else if (row.item.allDay) {
+    } else if (item.allDay) {
         val lastDay = epochToLocal(span.endMs - 1).date
         val a = "${TurkishDayShort[start.date.dayOfWeek.isoDayNumber - 1]} ${start.date.day} ${TurkishMonthShort[start.date.month.ordinal]}"
         if (lastDay == start.date) a

@@ -6,6 +6,11 @@ import com.talha.ruz.db.Category
 import com.talha.ruz.db.Item
 import com.talha.ruz.db.Link
 import com.talha.ruz.db.RuzDatabase
+import com.talha.ruz.db.Series
+import com.talha.ruz.recur.Recurrence
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
@@ -27,6 +32,9 @@ class SqlRuzRepository(
 
     override val links: Flow<List<RuzLink>> =
         db.linkQueries.selectActive().asFlow().mapToList(io).map { list -> list.map { it.toDomain() } }
+
+    override val series: Flow<List<RuzSeries>> =
+        db.seriesQueries.selectActive().asFlow().mapToList(io).map { list -> list.mapNotNull { it.toDomain() } }
 
     /** İlk açılışta örnek kategorileri ekler. Kullanıcı hepsini silse bile tekrar eklemez. */
     override suspend fun seedIfEmpty(): Unit = withContext(io) {
@@ -56,6 +64,7 @@ class SqlRuzRepository(
             now = nowMillis(),
             allDay = fields.allDay,
             reminderMinBefore = fields.reminderMinBefore?.toLong(),
+            seriesId = null,
         )
         id
     }
@@ -173,6 +182,79 @@ class SqlRuzRepository(
         db.linkQueries.softDelete(now = nowMillis(), id = id)
     }
 
+    override suspend fun addSeries(template: ItemFields, rule: Recurrence, firstStart: Long, timeZone: TimeZone): String =
+        withContext(io) {
+            val id = newId()
+            val first = epochToLocal(firstStart, timeZone)
+            val s = RuzSeries(
+                id = id,
+                rule = rule,
+                text = template.text.trim(),
+                categoryId = template.categoryId,
+                anchorDay = first.date,
+                timeMin = if (template.allDay) null else first.hour * 60 + first.minute,
+                durationMin = template.durationMin,
+                isMilestone = template.isMilestone,
+                reminderMinBefore = template.reminderMinBefore,
+                generatedUntil = initialGeneratedUntil(first.date),
+            )
+            db.transaction {
+                db.seriesQueries.insert(
+                    id = s.id,
+                    rule = rule.encode(),
+                    text = s.text,
+                    categoryId = s.categoryId,
+                    anchorDay = s.anchorDay.toString(),
+                    timeMin = s.timeMin?.toLong(),
+                    durationMin = s.durationMin?.toLong(),
+                    isMilestone = s.isMilestone,
+                    reminderMinBefore = s.reminderMinBefore?.toLong(),
+                    generatedUntil = s.generatedUntil.toString(),
+                    now = nowMillis(),
+                )
+                generate(s, first.date, timeZone)
+            }
+            id
+        }
+
+    override suspend fun extendSeries(today: LocalDate, timeZone: TimeZone): Unit = withContext(io) {
+        val all = db.seriesQueries.selectActive().executeAsList().mapNotNull { it.toDomain() }
+        db.transaction { all.forEach { generate(it, today, timeZone) } }
+    }
+
+    /** Seri için eksik tekrarları öğe olarak ekler (işlem içinde çağrılır). */
+    private fun generate(s: RuzSeries, today: LocalDate, timeZone: TimeZone) {
+        val (starts, until) = s.pendingStarts(today, timeZone)
+        if (until == s.generatedUntil) return
+        val now = nowMillis()
+        var order = db.itemQueries.minOrder().executeAsOne()
+        starts.forEach { start ->
+            order -= 1.0
+            db.itemQueries.insert(
+                id = newId(),
+                text = s.text,
+                categoryId = s.categoryId,
+                startAt = start,
+                durationMin = (s.durationMin ?: if (s.timeMin == null) 1440 else 60).toLong(),
+                isMilestone = s.isMilestone,
+                sortOrder = order,
+                now = now,
+                allDay = s.timeMin == null,
+                reminderMinBefore = s.reminderMinBefore?.toLong(),
+                seriesId = s.id,
+            )
+        }
+        db.seriesQueries.setGeneratedUntil(generatedUntil = until.toString(), now = now, id = s.id)
+    }
+
+    override suspend fun stopSeries(seriesId: String, fromMs: Long): Unit = withContext(io) {
+        val now = nowMillis()
+        db.transaction {
+            db.itemQueries.softDeleteFutureInSeries(now = now, seriesId = seriesId, fromMs = fromMs)
+            db.seriesQueries.softDelete(now = now, id = seriesId)
+        }
+    }
+
     private fun nextColor(used: List<Long>): Long =
         CategoryPalette.firstOrNull { it !in used } ?: CategoryPalette[used.size % CategoryPalette.size]
 }
@@ -193,6 +275,26 @@ private fun Item.toDomain() = RuzItem(
     reminderMinBefore = reminder_min_before?.toInt(),
     order = sort_order,
     createdAt = created_at,
+    seriesId = series_id,
 )
+
+private fun Series.toDomain(): RuzSeries? {
+    val rule = Recurrence.decode(rule) ?: return null
+    return RuzSeries(
+        id = id,
+        rule = rule,
+        text = text,
+        categoryId = category_id,
+        anchorDay = LocalDate.parse(anchor_day),
+        timeMin = time_min?.toInt(),
+        durationMin = duration_min?.toInt(),
+        isMilestone = is_milestone,
+        reminderMinBefore = reminder_min_before?.toInt(),
+        generatedUntil = LocalDate.parse(generated_until),
+    )
+}
+
+private fun epochToLocal(ms: Long, timeZone: TimeZone) =
+    kotlin.time.Instant.fromEpochMilliseconds(ms).toLocalDateTime(timeZone)
 
 private fun Link.toDomain() = RuzLink(id = id, predecessorId = predecessor_id, successorId = successor_id)

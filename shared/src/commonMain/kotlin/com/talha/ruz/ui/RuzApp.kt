@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.talha.ruz.data.CategoryPalette
 import com.talha.ruz.data.ItemFields
+import com.talha.ruz.data.collapseSeries
 import com.talha.ruz.ai.QuestionAnswer
 import com.talha.ruz.ai.QuestionAnswerer
 import com.talha.ruz.ui.ask.QuestionSheet
@@ -100,6 +101,8 @@ fun RuzApp(deps: RuzDeps) {
     RuzTheme {
         LaunchedEffect(Unit) {
             deps.repository.seedIfEmpty()
+            // Tekrar eden işlerin ilerideki tekrarlarını tamamla.
+            deps.repository.extendSeries(localNow().date, TimeZone.currentSystemDefault())
             deps.ai.refresh()
         }
 
@@ -135,6 +138,7 @@ private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit) {
     val categories by repo.categories.collectAsState(initial = emptyList())
     val items by repo.items.collectAsState(initial = emptyList())
     val links by repo.links.collectAsState(initial = emptyList())
+    val seriesList by repo.series.collectAsState(initial = emptyList())
     // Gelen kutusundan Gantt'a sürüklenen öğe ve parmağın pencere konumu.
     var dragItem by remember { mutableStateOf<RuzItem?>(null) }
     var dragPos by remember { mutableStateOf<Offset?>(null) }
@@ -301,21 +305,29 @@ private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit) {
                 p.date != null -> 1440
                 else -> null
             }
-            val id = repo.addItem(
-                ItemFields(
-                    text = p.title,
-                    categoryId = categoryId,
-                    startAt = TrDateParser.startEpochMs(p, TimeZone.currentSystemDefault()),
-                    durationMin = duration,
-                    allDay = p.allDay,
-                    isMilestone = p.isMilestone,
-                ),
+            val fields = ItemFields(
+                text = p.title,
+                categoryId = categoryId,
+                startAt = TrDateParser.startEpochMs(p, tz),
+                durationMin = duration,
+                allDay = p.allDay,
+                isMilestone = p.isMilestone,
             )
             val whenText = p.date?.let { d ->
                 dayLabel(d, today) + (p.time?.let { " " + hhmm(it) } ?: "")
             }
-            val summary = listOfNotNull(whenText, categoryName ?: "Gelen kutusu").joinToString(" · ")
-            notify("Eklendi · $summary") { repo.deleteItem(id) }
+            val rule = p.recurrence
+            val start = fields.startAt
+            if (rule != null && start != null) {
+                // Tekrar eden iş: şablon + ilk tekrarlar; "Geri al" bütün seriyi kaldırır.
+                val seriesId = repo.addSeries(fields, rule, start, tz)
+                val summary = listOfNotNull("↻ " + rule.label(), "ilk: $whenText", categoryName ?: "Gelen kutusu").joinToString(" · ")
+                notify("Eklendi · $summary") { repo.stopSeries(seriesId, Long.MIN_VALUE) }
+            } else {
+                val id = repo.addItem(fields)
+                val summary = listOfNotNull(whenText, categoryName ?: "Gelen kutusu").joinToString(" · ")
+                notify("Eklendi · $summary") { repo.deleteItem(id) }
+            }
         }
     }
 
@@ -371,14 +383,14 @@ private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit) {
                 }
             },
         ) { padding ->
-            val inboxItems = items.filter { it.inInbox && !it.done }
+            val inboxItems = collapseSeries(items.filter { it.inInbox && !it.done })
 
             @Composable
             fun CategoriesArea(m: Modifier) {
                 if (openCategory != null) {
                     CategoryDetailPane(
                         category = openCategory,
-                        items = items.filter { it.categoryId == openCategory.id },
+                        items = collapseSeries(items.filter { it.categoryId == openCategory.id }),
                         today = today,
                         onBack = { openCategoryId = null },
                         onToggleDone = ::toggleDone,
@@ -388,7 +400,7 @@ private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit) {
                 } else {
                     CategoriesPane(
                         categories = categories,
-                        items = items,
+                        items = collapseSeries(items),
                         onOpen = { openCategoryId = it.id },
                         onAdd = { categoryDialog = NewCategory },
                         onEdit = { categoryDialog = it.id },
@@ -510,6 +522,17 @@ private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit) {
             },
             onToggleDone = { done -> toggleDone(editingItem.id, done) },
             onDelete = { deleteItem(editingItem) },
+            seriesLabel = editingItem.seriesId?.let { sid -> seriesList.firstOrNull { it.id == sid }?.rule?.label() },
+            onStopSeries = {
+                val sid = editingItem.seriesId
+                if (sid != null) {
+                    editingItemId = null
+                    // Bu tekrar ve sonrakiler silinir; geçmiştekiler kalır.
+                    val from = editingItem.startAt ?: Long.MIN_VALUE
+                    scope.launch { repo.stopSeries(sid, from) }
+                    notify("Tekrar durduruldu: ${editingItem.text}")
+                }
+            },
         )
     }
 

@@ -30,6 +30,8 @@ data class RuzItem(
     val reminderMinBefore: Int?,
     val order: Double,
     val createdAt: Long,
+    /** Tekrar eden bir serinin tekrarıysa serinin kimliği. */
+    val seriesId: String? = null,
 ) {
     val isScheduled: Boolean get() = startAt != null
     val inInbox: Boolean get() = categoryId == null

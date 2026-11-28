@@ -161,6 +161,7 @@ private fun PreviewChips(
             parsed.durationMin?.let { RemovableChip(durationLabel(it)) { onRemove(ChipKind.Duration) } }
         }
         if (parsed.isMilestone) RemovableChip("◆ Son tarih") { onRemove(ChipKind.Milestone) }
+        parsed.recurrence?.let { RemovableChip("↻ " + it.label()) { onRemove(ChipKind.Repeat) } }
 
         val catName = parsed.categoryName
         if (catName != null) {

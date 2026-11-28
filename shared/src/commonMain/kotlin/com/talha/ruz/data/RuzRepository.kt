@@ -1,6 +1,9 @@
 package com.talha.ruz.data
 
+import com.talha.ruz.recur.Recurrence
 import kotlinx.coroutines.flow.Flow
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
 
 /** Bir öğenin düzenlenebilir alanları. */
 data class ItemFields(
@@ -25,6 +28,7 @@ interface RuzRepository {
     val categories: Flow<List<RuzCategory>>
     val items: Flow<List<RuzItem>>
     val links: Flow<List<RuzLink>>
+    val series: Flow<List<RuzSeries>>
 
     /** İlk açılışta örnek kategorileri ekler. Kullanıcı hepsini silse bile tekrar eklemez. */
     suspend fun seedIfEmpty()
@@ -62,6 +66,18 @@ interface RuzRepository {
     /** Bitiş-başlangıç bağı ekler, kimliğini döndürür. */
     suspend fun addLink(predecessorId: String, successorId: String): String
     suspend fun deleteLink(id: String)
+
+    /**
+     * Tekrar eden iş ekler: şablonu kaydeder ve ilk tekrarları üretir. [firstStart] ilk tekrarın başlangıcı.
+     * Serinin kimliğini döndürür.
+     */
+    suspend fun addSeries(template: ItemFields, rule: Recurrence, firstStart: Long, timeZone: TimeZone): String
+
+    /** Bütün serilerin tekrarlarını ufka kadar tamamlar (açılışta çağrılır). */
+    suspend fun extendSeries(today: LocalDate, timeZone: TimeZone)
+
+    /** Seriyi durdurur: bitmemiş, [fromMs] ve sonrasındaki tekrarlar silinir; geçmiştekiler kalır. */
+    suspend fun stopSeries(seriesId: String, fromMs: Long)
 }
 
 /** Kullanılmayan ilk palet rengi; hepsi kullanıldıysa sırayla döner. */
