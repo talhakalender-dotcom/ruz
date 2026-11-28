@@ -43,7 +43,6 @@ import com.talha.ruz.ui.gantt.GanttChart
 import com.talha.ruz.ui.gantt.GanttDropTarget
 import com.talha.ruz.data.RuzLink
 import com.talha.ruz.gantt.DragHandle
-import androidx.compose.ui.geometry.Offset
 import com.talha.ruz.ui.timeRangeLabel
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
