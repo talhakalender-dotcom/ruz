@@ -105,7 +105,7 @@ private val WideLayoutMinWidth = 600.dp
 private const val NewCategory = "__new__"
 
 @Composable
-fun RuzApp(deps: RuzDeps) {
+fun RuzApp(deps: RuzDeps, launchAction: LaunchAction? = null) {
     RuzTheme {
         LaunchedEffect(Unit) {
             deps.repository.seedIfEmpty()
@@ -129,13 +129,13 @@ fun RuzApp(deps: RuzDeps) {
                 PlatformBackHandler(enabled = true) { overlay = Overlay.Settings }
                 NanoTestScreen(deps = deps, onBack = { overlay = Overlay.Settings })
             }
-            Overlay.None -> MainScreen(deps = deps, onOpenSettings = { overlay = Overlay.Settings })
+            Overlay.None -> MainScreen(deps = deps, onOpenSettings = { overlay = Overlay.Settings }, launchAction = launchAction)
         }
     }
 }
 
 @Composable
-private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit) {
+private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit, launchAction: LaunchAction? = null) {
     val repo = deps.repository
     var tab by rememberSaveable { mutableStateOf(Tab.Plan) }
     var leftTab by rememberSaveable { mutableStateOf(Tab.Inbox) }
@@ -379,6 +379,8 @@ private fun MainScreen(deps: RuzDeps, onOpenSettings: () -> Unit) {
                         categories = categories,
                         defaultCategory = defaultCategory,
                         onSubmit = { submit(it, defaultCategory) },
+                        focusRequest = launchAction?.takeIf { it.kind == LaunchAction.CAPTURE }?.nonce,
+                        voiceRequest = launchAction?.takeIf { it.kind == LaunchAction.VOICE }?.nonce,
                     )
                     if (!wide) {
                         NavigationBar {

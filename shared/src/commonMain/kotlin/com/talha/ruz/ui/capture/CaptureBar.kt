@@ -26,6 +26,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,6 +65,10 @@ fun CaptureBar(
     defaultCategory: RuzCategory?,
     onSubmit: (ParsedCapture) -> Unit,
     modifier: Modifier = Modifier,
+    /** Değiştikçe kutuya odaklanır (widget'taki "+"). */
+    focusRequest: Long? = null,
+    /** Değiştikçe sesle yazma başlar (widget'taki mikrofon). */
+    voiceRequest: Long? = null,
 ) {
     var text by rememberSaveable { mutableStateOf("") }
     var ignored by remember { mutableStateOf(emptySet<ChipKind>()) }
@@ -72,6 +79,9 @@ fun CaptureBar(
     val speech = rememberSpeechInput { spoken ->
         text = if (text.isBlank()) spoken else text.trimEnd() + " " + spoken
     }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(focusRequest) { if (focusRequest != null) runCatching { focus.requestFocus() } }
+    LaunchedEffect(voiceRequest) { if (voiceRequest != null) speech?.invoke() }
     val submit = {
         val p = parsed
         if (p != null) {
@@ -111,7 +121,7 @@ fun CaptureBar(
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { submit() }),
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).focusRequester(focus),
                 )
                 if (speech != null) {
                     IconButton(onClick = speech) {

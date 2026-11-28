@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Ruz</string>
+    <string name="widget_name">Ruz · Bugün</string>
+    <string name="widget_description">Bugünün planı, yaklaşan son tarihler, alışkanlıklar ve hızlı ekleme</string>
 </resources>
